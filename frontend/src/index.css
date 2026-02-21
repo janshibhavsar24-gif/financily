@@ -1,0 +1,12 @@
+/*
+ * Global stylesheet.
+ *
+ * These three directives inject Tailwind's base reset, utility classes,
+ * and component layer into the bundle at build time.
+ * Do not add custom CSS here unless it genuinely cannot be expressed
+ * as a Tailwind utility class.
+ */
+
+/* TODO: add @tailwind base; */
+/* TODO: add @tailwind components; */
+/* TODO: add @tailwind utilities; */

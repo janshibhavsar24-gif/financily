@@ -17,41 +17,137 @@ This document breaks every spec item into concrete, ordered, file-level tasks. E
 
 ## Phase 0 — Project Scaffold
 
-### P0.1 — Repo structure
+### P0.1 — Repo structure (monorepo)
 
-Create the following empty directories and placeholder files:
+The project is a monorepo with two packages (`backend/`, `frontend/`) coordinated from the root. No workspace tooling (Turborepo, nx) is needed at this scale.
+
+Create the following structure:
 
 ```
-backend/
-  main.py
-  config.py
-  data/
-    __init__.py
-    db.py
-    fetcher.py
-    sync.py
-  engine/
-    __init__.py
-    forecaster.py
-    covariance.py
-    risk.py
-    optimizer.py
-    tax.py
-  api/
-    __init__.py
-    sync.py
-    optimize.py
-    assets.py
-    risk.py
-  requirements.txt
-frontend/         (scaffold in P4.1)
-data/             (DuckDB lives here, gitignored)
-specs/
+financily/                        # repo root
+├── backend/                      # Python package
+│   ├── __init__.py
+│   ├── main.py
+│   ├── config.py
+│   ├── data/
+│   │   ├── __init__.py
+│   │   ├── db.py
+│   │   ├── fetcher.py
+│   │   └── sync.py
+│   ├── engine/
+│   │   ├── __init__.py
+│   │   ├── forecaster.py
+│   │   ├── covariance.py
+│   │   ├── risk.py
+│   │   ├── optimizer.py
+│   │   └── tax.py
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── sync.py
+│   │   ├── optimize.py
+│   │   ├── assets.py
+│   │   └── risk.py
+│   └── tests/
+│       ├── __init__.py
+│       ├── fixtures/             # CSV fixtures for unit tests
+│       ├── test_engine.py
+│       └── test_api.py
+├── frontend/                     # Node package (scaffold in P4.1)
+│   ├── src/
+│   ├── e2e/
+│   ├── index.html
+│   ├── vite.config.ts
+│   ├── playwright.config.ts
+│   ├── tailwind.config.ts
+│   ├── tsconfig.json
+│   └── package.json
+├── specs/
+│   ├── vision.md
+│   ├── specs.md
+│   ├── implementation-plan.md
+│   └── requirements.md
+├── data/                         # gitignored — DuckDB file lives here
+├── cli.py                        # root CLI entry point (see P0.4)
+├── pyproject.toml                # installs `financily` CLI command
+├── .env.example                  # template for all env vars
+├── .gitignore
+└── README.md
 ```
 
-Add `data/` to `.gitignore`.
+Root `.gitignore` must cover both Python and Node artifacts:
+```
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+dist/
 
-### P0.2 — Backend requirements.txt
+# Node
+node_modules/
+frontend/dist/
+
+# App data
+data/
+.env
+```
+
+### P0.2 — Root `pyproject.toml`
+
+Defines the project as an installable Python package with a CLI entry point. This is what makes `financily dev` work from anywhere after a one-time `pip install -e .`.
+
+```toml
+[project]
+name = "financily"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "duckdb>=0.10",
+    "yfinance>=0.2",
+    "arch>=6.3",
+    "scikit-learn>=1.4",
+    "scipy>=1.12",
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "fredapi>=0.5",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+    "typer>=0.12",          # CLI framework
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",           # for FastAPI TestClient
+]
+
+[project.scripts]
+financily = "cli:app"        # `financily` command → cli.py::app
+
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.backends.legacy:build"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*"]
+```
+
+Install once at the repo root:
+```bash
+pip install -e ".[dev]"
+```
+
+After this, `financily` is available as a shell command.
+
+---
+
+### P0.3 — Backend `requirements.txt`
+
+Kept as a flat file for environments that prefer `pip install -r` over `pyproject.toml`. It mirrors the `[project.dependencies]` list in `pyproject.toml` exactly.
 
 ```
 fastapi>=0.110
@@ -66,12 +162,15 @@ pandas>=2.2
 fredapi>=0.5
 httpx>=0.27
 python-dotenv>=1.0
+typer>=0.12
 pytest>=8.0
+pytest-asyncio>=0.23
 ```
 
-Install: `pip install -r backend/requirements.txt`
+Preferred install (from repo root): `pip install -e ".[dev]"`
+Alternative: `pip install -r backend/requirements.txt`
 
-### P0.3 — config.py
+### P0.4 — `config.py`
 
 **File:** `backend/config.py`
 
@@ -91,6 +190,178 @@ DEFAULT_TAX_RATE_ST: float  # 0.37
 ```
 
 All values read from env via `python-dotenv` with the above as fallback defaults.
+
+---
+
+### P0.5 — CLI (`cli.py` at repo root)
+
+**File:** `cli.py`
+
+The CLI is a `typer` app installed as the `financily` shell command via `pyproject.toml`. It provides four commands: `dev`, `build`, `start`, and `test`.
+
+```python
+import signal
+import subprocess
+import sys
+import typer
+from pathlib import Path
+
+app = typer.Typer(help="Financily — local investment risk engine")
+
+ROOT = Path(__file__).parent
+BACKEND_DIR = ROOT / "backend"
+FRONTEND_DIR = ROOT / "frontend"
+```
+
+#### `financily dev`
+
+Starts both the FastAPI backend and the Vite frontend dev server concurrently in a single terminal. Output from both processes is interleaved and prefixed (`[backend]` / `[frontend]`). `Ctrl+C` kills both.
+
+```python
+@app.command()
+def dev(
+    backend_port: int = typer.Option(8000, help="Port for FastAPI"),
+    frontend_port: int = typer.Option(5173, help="Port for Vite"),
+):
+    """Start backend + frontend dev servers concurrently."""
+    backend_cmd = [
+        sys.executable, "-m", "uvicorn",
+        "backend.main:app",
+        "--reload",
+        f"--port={backend_port}",
+    ]
+    frontend_cmd = ["npm", "run", "dev", "--", "--port", str(frontend_port)]
+
+    procs = [
+        subprocess.Popen(backend_cmd, cwd=ROOT),
+        subprocess.Popen(frontend_cmd, cwd=FRONTEND_DIR),
+    ]
+
+    def _shutdown(sig, frame):
+        for p in procs:
+            p.terminate()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, _shutdown)
+    signal.signal(signal.SIGTERM, _shutdown)
+
+    # Block until either process exits (crash detection)
+    for p in procs:
+        p.wait()
+```
+
+#### `financily build`
+
+Compiles the React frontend into `frontend/dist/`.
+
+```python
+@app.command()
+def build():
+    """Build the frontend for production."""
+    result = subprocess.run(["npm", "run", "build"], cwd=FRONTEND_DIR)
+    if result.returncode != 0:
+        typer.echo("Frontend build failed.", err=True)
+        raise typer.Exit(1)
+    typer.echo("Build complete → frontend/dist/")
+```
+
+#### `financily start`
+
+Production mode: builds the frontend (if `frontend/dist/` is absent or stale) then starts only the FastAPI server, which serves both the API and the static frontend.
+
+```python
+@app.command()
+def start(
+    port: int = typer.Option(8000, help="Port for FastAPI"),
+    skip_build: bool = typer.Option(False, "--skip-build", help="Skip npm build step"),
+):
+    """Build frontend (if needed) and start the production server."""
+    dist = FRONTEND_DIR / "dist"
+    if not skip_build or not dist.exists():
+        typer.echo("Building frontend...")
+        build()
+    typer.echo(f"Starting server on http://localhost:{port}")
+    subprocess.run([
+        sys.executable, "-m", "uvicorn",
+        "backend.main:app",
+        f"--port={port}",
+    ], cwd=ROOT)
+```
+
+#### `financily test`
+
+Runs backend pytest suite and/or Playwright e2e tests.
+
+```python
+@app.command()
+def test(
+    backend: bool = typer.Option(True, help="Run pytest"),
+    e2e: bool = typer.Option(True, help="Run Playwright e2e tests"),
+):
+    """Run backend unit/integration tests and/or Playwright e2e tests."""
+    if backend:
+        typer.echo("Running backend tests...")
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "backend/tests", "-v"],
+            cwd=ROOT,
+        )
+        if result.returncode != 0:
+            raise typer.Exit(result.returncode)
+
+    if e2e:
+        typer.echo("Running Playwright e2e tests...")
+        result = subprocess.run(
+            ["npm", "run", "test:e2e"],
+            cwd=FRONTEND_DIR,
+        )
+        if result.returncode != 0:
+            raise typer.Exit(result.returncode)
+```
+
+**Summary of CLI commands:**
+
+| Command | What it does |
+|---|---|
+| `financily dev` | Backend (`:8000`, hot-reload) + Frontend (`:5173`, HMR) concurrently |
+| `financily build` | Compile React → `frontend/dist/` |
+| `financily start` | Build frontend + serve everything from FastAPI on `:8000` |
+| `financily start --skip-build` | Skip npm build, just start FastAPI (use when dist is fresh) |
+| `financily test` | Run pytest + Playwright |
+| `financily test --no-e2e` | Run pytest only |
+| `financily test --no-backend` | Run Playwright only |
+
+**One-time setup from repo root:**
+```bash
+pip install -e ".[dev]"      # installs `financily` CLI
+cd frontend && npm install   # install Node deps
+```
+
+**Verification:** `financily --help` prints the command list. `financily dev` starts both servers and a browser at `localhost:5173` shows the app.
+
+---
+
+### P0.6 — `.env.example`
+
+```
+# Backend
+DB_PATH=data/financily.duckdb
+LOOKBACK_YEARS=10
+GARCH_WINDOW_YEARS=3
+SHRINKAGE_LAMBDA=0.3
+N_SIMULATIONS=10000
+RANDOM_SEED=42
+MAX_WEIGHT=0.40
+FRONTIER_STEPS=20
+DEFAULT_TAX_RATE_LT=0.15
+DEFAULT_TAX_RATE_ST=0.37
+FRED_API_KEY=              # optional — leave blank to use yfinance fallback
+
+# CLI
+BACKEND_PORT=8000
+FRONTEND_PORT=5173
+```
+
+Copy to `.env` (gitignored) and fill in values. The CLI and backend both load this file automatically on startup.
 
 ---
 
@@ -1226,8 +1497,11 @@ Monte Carlo with N=10,000 and 3 assets over horizon=3 must complete the full opt
 ## Dependency Graph
 
 ```
-P0.1 → P0.2 → P0.3
-P0.3 → P1.1 → P1.2 → P1.3 → P1.4
+P0.1 → P0.2 → P0.3 → P0.4
+P0.1 → P0.5                  (CLI depends on repo structure)
+P0.1 → P0.6                  (.env.example depends on knowing all config keys)
+
+P0.4 → P1.1 → P1.2 → P1.3 → P1.4
                               P1.3 → P1.5
 P1.1 → P1.6 (registers P1.4, P1.5)
 
@@ -1245,6 +1519,9 @@ P3.3 → P4.1 → P4.2 → P4.3 → P4.4
                        P4.3 → P4.5 → P4.6 → P4.7
 P4.1 → P4.8
 P4.2 + P4.5 + P4.6 → P4.9   (tests depend on types + testids being on components)
+
+P0.5 + P4.7 → P5.1           (CLI `start` command requires built frontend)
+P3.4 + P4.9 → P5.1           (smoke test requires all tests passing first)
 ```
 
 ---

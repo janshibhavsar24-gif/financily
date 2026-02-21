@@ -526,35 +526,47 @@ FastAPI serves the built `frontend/dist/` folder in production (no separate serv
 
 ---
 
-## 11. Project Structure
+## 11. Project Structure (Monorepo)
 
 ```
-financily/
-├── backend/
-│   ├── main.py                  # FastAPI app + route registration
-│   ├── config.py                # constants, defaults, DB path
+financily/                            # repo root
+├── backend/                          # Python package
+│   ├── __init__.py
+│   ├── main.py                       # FastAPI app + route registration
+│   ├── config.py                     # constants + env-var defaults
 │   ├── data/
-│   │   ├── db.py                # DuckDB connection + schema init
-│   │   ├── fetcher.py           # yfinance + FRED fetch logic
-│   │   └── sync.py              # upsert logic, incremental sync
+│   │   ├── __init__.py
+│   │   ├── db.py                     # DuckDB connection + schema init
+│   │   ├── fetcher.py                # yfinance + FRED fetch logic
+│   │   └── sync.py                   # incremental upsert logic
 │   ├── engine/
-│   │   ├── forecaster.py        # GARCH + shrinkage return estimates
-│   │   ├── covariance.py        # Ledoit-Wolf covariance
-│   │   ├── risk.py              # drawdown, VaR, CVaR, volatility
-│   │   ├── optimizer.py         # SLSQP max-drawdown optimizer
-│   │   └── tax.py               # after-tax return computation
+│   │   ├── __init__.py
+│   │   ├── forecaster.py             # GARCH + James-Stein shrinkage
+│   │   ├── covariance.py             # Ledoit-Wolf covariance
+│   │   ├── risk.py                   # Monte Carlo drawdown, VaR, CVaR
+│   │   ├── optimizer.py              # SLSQP max-drawdown optimizer
+│   │   └── tax.py                    # after-tax return computation
 │   ├── api/
-│   │   ├── sync.py              # /api/sync endpoint
-│   │   ├── optimize.py          # /api/optimize endpoint
-│   │   ├── assets.py            # /api/assets endpoint
-│   │   └── risk.py              # /api/risk endpoint
-│   └── requirements.txt
-├── frontend/
+│   │   ├── __init__.py
+│   │   ├── sync.py                   # POST /api/sync
+│   │   ├── optimize.py               # POST /api/optimize
+│   │   ├── assets.py                 # GET /api/assets
+│   │   └── risk.py                   # GET /api/risk
+│   ├── tests/
+│   │   ├── __init__.py
+│   │   ├── fixtures/                 # CSV return data for unit tests
+│   │   ├── test_engine.py
+│   │   └── test_api.py
+│   └── requirements.txt              # flat dep list (mirrors pyproject.toml)
+│
+├── frontend/                         # Node package
 │   ├── src/
 │   │   ├── main.tsx
 │   │   ├── App.tsx
-│   │   ├── api/client.ts
-│   │   ├── types/api.ts
+│   │   ├── api/
+│   │   │   └── client.ts             # typed fetch wrappers
+│   │   ├── types/
+│   │   │   └── api.ts                # TS interfaces for all API shapes
 │   │   ├── components/
 │   │   │   ├── AssetSelector.tsx
 │   │   │   ├── ParamForm.tsx
@@ -563,18 +575,63 @@ financily/
 │   │   │   ├── MetricsCard.tsx
 │   │   │   ├── RiskCostTable.tsx
 │   │   │   └── ForecastTable.tsx
-│   │   └── hooks/useOptimize.ts
+│   │   └── hooks/
+│   │       └── useOptimize.ts
+│   ├── e2e/
+│   │   ├── mocks/
+│   │   │   └── api.ts                # mock response factories
+│   │   ├── app.spec.ts               # user journey tests
+│   │   └── components.spec.ts        # error state + edge case tests
 │   ├── index.html
-│   ├── vite.config.ts
+│   ├── vite.config.ts                # includes /api proxy to :8000
+│   ├── playwright.config.ts
 │   ├── tailwind.config.ts
 │   ├── tsconfig.json
 │   └── package.json
+│
 ├── specs/
 │   ├── vision.md
-│   └── specs.md
-├── data/                        # DuckDB file lives here (gitignored)
+│   ├── specs.md
+│   ├── implementation-plan.md
+│   └── requirements.md
+│
+├── data/                             # gitignored — runtime data only
 │   └── financily.duckdb
+│
+├── cli.py                            # `financily` CLI (typer)
+├── pyproject.toml                    # installs `financily` as a shell command
+├── .env.example                      # template for all environment variables
+├── .env                              # gitignored — actual values
+├── .gitignore
 └── README.md
+```
+
+### How the monorepo is coordinated
+
+There is no workspace tooling (Turborepo, nx, Poetry workspaces). Coordination is entirely through:
+
+1. **`pyproject.toml` at root** — installs the Python backend as an editable package and registers the `financily` CLI entry point.
+2. **`frontend/package.json`** — manages the React app independently. The root has no `package.json`.
+3. **`cli.py`** — the single command surface that orchestrates both. All dev/build/test workflows go through it.
+4. **Shared `.env`** — one file at the root, loaded by `python-dotenv` in the backend. Vite can optionally read it via `vite.config.ts` if frontend env vars are needed in future.
+
+### One-time setup
+
+```bash
+# From repo root
+pip install -e ".[dev]"       # installs Python deps + financily CLI
+
+cd frontend
+npm install                   # installs Node deps + Playwright
+cd ..
+```
+
+### Daily workflow
+
+```bash
+financily dev                 # start everything for development
+financily start               # build frontend + run production server
+financily test                # run all tests (pytest + Playwright)
 ```
 
 ---
