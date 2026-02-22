@@ -1,40 +1,171 @@
-// App — root component and two-panel layout.
-//
-// Layout (see requirement FE-013):
-//
-//   ┌──────────────┬────────────────────────────────────┐
-//   │  Left panel  │         Right panel                │
-//   │  (w-80 fixed)│         (flex-1 scrollable)        │
-//   │              │                                    │
-//   │ AssetSelector│  if loading  → spinner             │
-//   │ SyncButton   │  if error    → red error box       │
-//   │ ParamForm    │  if result   → WeightsBar          │
-//   │              │               MetricsCard          │
-//   │ [Run button] │               RiskCostTable        │
-//   │              │               ForecastTable        │
-//   │              │  else        → empty state text    │
-//   └──────────────┴────────────────────────────────────┘
-//
-// State owned here:
-//   selectedTickers: string[]       — driven by AssetSelector
-//   optimizeRequest: OptimizeRequest — driven by ParamForm
-//   useOptimize() result            — loading / result / error
-//
-// Rules:
-//   - Only one right-panel state is visible at a time (empty / spinner /
-//     error / results). See requirement FE-013.
-//   - "Run Optimizer" button is disabled while state.loading is true.
-//   - selectedTickers is passed to SyncButton so it knows what to sync.
+import { useState } from 'react'
+import { useOptimize } from './hooks/useOptimize'
+import AssetSelector from './components/AssetSelector'
+import SyncButton from './components/SyncButton'
+import ParamForm from './components/ParamForm'
+import WeightsBar from './components/WeightsBar'
+import MetricsCard from './components/MetricsCard'
+import RiskCostTable from './components/RiskCostTable'
+import ForecastTable from './components/ForecastTable'
+import type { OptimizeRequest } from './types/api'
 
-// TODO: import React, { useState } from 'react'
-// TODO: import { useOptimize } from './hooks/useOptimize'
-// TODO: import AssetSelector from './components/AssetSelector'
-// TODO: import SyncButton from './components/SyncButton'
-// TODO: import ParamForm from './components/ParamForm'
-// TODO: import WeightsBar from './components/WeightsBar'
-// TODO: import MetricsCard from './components/MetricsCard'
-// TODO: import RiskCostTable from './components/RiskCostTable'
-// TODO: import ForecastTable from './components/ForecastTable'
-// TODO: import type { OptimizeRequest } from './types/api'
+const DEFAULT_REQUEST: OptimizeRequest = {
+  tickers: [],
+  target_return: 0.12,
+  horizon_years: 3,
+  max_weight: 0.40,
+  tax_rate_lt: 0.15,
+  tax_rate_st: 0.37,
+  n_simulations: 5000,
+}
 
-// TODO: default export function App()
+export default function App() {
+  const [selectedTickers, setSelectedTickers] = useState<string[]>([])
+  const [params, setParams] = useState<OptimizeRequest>(DEFAULT_REQUEST)
+  const { state, run, reset } = useOptimize()
+
+  function handleSubmit() {
+    run({ ...params, tickers: selectedTickers })
+  }
+
+  function handleParamsChange(updated: OptimizeRequest) {
+    setParams(updated)
+    if (state.result !== null || state.error !== null) {
+      reset()
+    }
+  }
+
+  function handleTickersChange(tickers: string[]) {
+    setSelectedTickers(tickers)
+    if (state.result !== null || state.error !== null) {
+      reset()
+    }
+  }
+
+  return (
+    <div className="flex h-screen bg-gray-50 font-sans">
+      {/* Left panel */}
+      <aside className="w-80 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h1 className="text-lg font-bold text-gray-900">Financily</h1>
+          <p className="text-xs text-gray-500 mt-0.5">Portfolio Risk Engine</p>
+        </div>
+
+        <div className="flex-1 px-5 py-4 space-y-6">
+          {/* Asset selection */}
+          <section>
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+              Assets
+            </h2>
+            <AssetSelector
+              selected={selectedTickers}
+              onChange={handleTickersChange}
+            />
+          </section>
+
+          {/* Sync */}
+          <section>
+            <SyncButton tickers={selectedTickers} />
+          </section>
+
+          {/* Parameters */}
+          <section>
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+              Parameters
+            </h2>
+            <ParamForm
+              value={{ ...params, tickers: selectedTickers }}
+              onChange={handleParamsChange}
+              loading={state.loading}
+              onSubmit={handleSubmit}
+            />
+          </section>
+        </div>
+      </aside>
+
+      {/* Right panel */}
+      <main className="flex-1 overflow-y-auto px-8 py-6">
+        {state.loading && (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center space-y-3">
+              <svg
+                className="animate-spin h-10 w-10 text-blue-600 mx-auto"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8v8H4z"
+                />
+              </svg>
+              <p className="text-sm text-gray-500">Running optimizer…</p>
+            </div>
+          </div>
+        )}
+
+        {!state.loading && state.error !== null && (
+          <div className="max-w-xl mx-auto mt-16">
+            <div className="bg-red-50 border border-red-200 rounded-xl px-6 py-4">
+              <p className="text-sm font-semibold text-red-700 mb-1">Optimization failed</p>
+              <p className="text-sm text-red-600">{state.error}</p>
+              <button
+                type="button"
+                onClick={reset}
+                className="mt-3 text-xs text-red-700 underline hover:no-underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!state.loading && state.result !== null && (
+          <div className="space-y-8 max-w-4xl">
+            <div>
+              <h2 className="text-base font-bold text-gray-800 mb-3">Optimal Weights</h2>
+              <WeightsBar weights={state.result.optimal_portfolio.weights} />
+            </div>
+
+            <div>
+              <h2 className="text-base font-bold text-gray-800 mb-3">Portfolio Metrics</h2>
+              <MetricsCard metrics={state.result.optimal_portfolio} />
+            </div>
+
+            <div>
+              <h2 className="text-base font-bold text-gray-800 mb-3">Efficient Frontier</h2>
+              <RiskCostTable
+                rows={state.result.risk_cost_table}
+                targetReturn={params.target_return}
+              />
+            </div>
+
+            <div>
+              <h2 className="text-base font-bold text-gray-800 mb-3">Asset Forecasts</h2>
+              <ForecastTable forecasts={state.result.forecasts} />
+            </div>
+          </div>
+        )}
+
+        {!state.loading && state.result === null && state.error === null && (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center space-y-2">
+              <p className="text-gray-400 text-sm">
+                Select assets, set your target return, and click{' '}
+                <span className="font-semibold text-blue-600">Run Optimizer</span>.
+              </p>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  )
+}

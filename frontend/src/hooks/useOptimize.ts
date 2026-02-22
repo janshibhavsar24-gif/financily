@@ -1,48 +1,63 @@
-// useOptimize — custom hook that manages the full optimize request lifecycle.
-//
-// Exposes: { state, run, reset }
-//
-// State shape:
-//   loading: boolean         — true from the moment run() is called until
-//                              the response (success or error) is received
-//   result:  OptimizeResponse | null
-//   error:   string | null   — human-readable message, rules:
-//              • 422 infeasibility → "Target return of X% is not achievable.
-//                                     Max achievable: Y%."
-//              • 422 missing data  → pass through the FastAPI detail string
-//              • any other error   → "An unexpected error occurred."
-//
-// Rules (see requirement FE-008):
-//   - Only one of (loading / result / error) is active at a time.
-//   - reset() sets all three back to their initial values so the UI can
-//     return to the empty state.
-//   - The hook does NOT manage the OptimizeRequest form state — that lives
-//     in App.tsx. This hook only owns the async call and its lifecycle.
+import { useCallback, useState } from 'react'
+import { ApiError, optimizePortfolio } from '../api/client'
+import type { InfeasibilityDetail, OptimizeRequest, OptimizeResponse } from '../types/api'
 
-// TODO: import { useState } from 'react'
-// TODO: import { optimizePortfolio } from '../api/client'
-// TODO: import { ApiError } from '../api/client'
-// TODO: import type { OptimizeRequest, OptimizeResponse } from '../types/api'
+interface UseOptimizeState {
+  result: OptimizeResponse | null
+  loading: boolean
+  error: string | null
+}
 
-// TODO: interface UseOptimizeState {
-//   result: OptimizeResponse | null
-//   loading: boolean
-//   error: string | null
-// }
+const INITIAL_STATE: UseOptimizeState = {
+  result: null,
+  loading: false,
+  error: null,
+}
 
-// TODO: export function useOptimize(): {
-//   state: UseOptimizeState
-//   run: (req: OptimizeRequest) => Promise<void>
-//   reset: () => void
-// }
-//
-// Inside run():
-//   1. Set loading = true, error = null, result = null
-//   2. Call optimizePortfolio(req)
-//   3. On success: set result, loading = false
-//   4. On ApiError with status 422:
-//      - If detail contains InfeasibilityDetail shape → format the
-//        "Target return of X% not achievable" message
-//      - Otherwise → use detail string directly
-//      Set error, loading = false
-//   5. On any other error: set generic error message, loading = false
+export function useOptimize(): {
+  state: UseOptimizeState
+  run: (req: OptimizeRequest) => Promise<void>
+  reset: () => void
+} {
+  const [state, setState] = useState<UseOptimizeState>(INITIAL_STATE)
+
+  const run = useCallback(async (req: OptimizeRequest) => {
+    setState({ result: null, loading: true, error: null })
+    try {
+      const result = await optimizePortfolio(req)
+      setState({ result, loading: false, error: null })
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 422) {
+        let errorMsg: string
+        try {
+          const parsed = JSON.parse(err.detail) as unknown
+          if (
+            parsed !== null &&
+            typeof parsed === 'object' &&
+            'error' in parsed &&
+            (parsed as InfeasibilityDetail).error === 'infeasible' &&
+            'max_achievable' in parsed
+          ) {
+            const detail = parsed as InfeasibilityDetail
+            const pct = Math.round(detail.max_achievable * 100)
+            const targetPct = Math.round(req.target_return * 100)
+            errorMsg = `Target return of ${targetPct}% is not achievable. Max achievable: ${pct}%.`
+          } else {
+            errorMsg = err.detail
+          }
+        } catch {
+          errorMsg = err.detail
+        }
+        setState({ result: null, loading: false, error: errorMsg })
+      } else {
+        setState({ result: null, loading: false, error: 'An unexpected error occurred.' })
+      }
+    }
+  }, [])
+
+  const reset = useCallback(() => {
+    setState(INITIAL_STATE)
+  }, [])
+
+  return { state, run, reset }
+}

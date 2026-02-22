@@ -1,45 +1,93 @@
-// components.spec.ts — error states and component edge cases (see TST-008)
-//
-// These 6 tests verify that individual components handle errors and edge
-// cases correctly. Each test overrides one API endpoint via setupApiMocks.
-// All tests run without a backend (TST-005).
-//
-// Tests in this file:
-//
-//   1. 'shows infeasibility error when target return too high'
-//      Override /api/optimize → 422 { error: 'infeasible', max_achievable: 0.14 }
-//      Click "Run Optimizer", assert error message contains "14%" and
-//      text like "not achievable" is visible.
-//
-//   2. 'shows sync error message on backend failure'
-//      Override /api/sync → 502 { detail: 'Yahoo Finance unavailable' }
-//      Click "Sync Data", assert "Yahoo Finance unavailable" in red is visible.
-//
-//   3. 'shows "no data — sync first" when assets list is empty'
-//      Override /api/assets → { assets: [] }
-//      Click the search input, assert "No data — sync first" appears
-//      in the dropdown.
-//
-//   4. 'RiskCostTable highlights row matching target return'
-//      Default target return is 20%. Run optimizer.
-//      Assert data-testid="risk-row-0.20" has a Tailwind ring class applied.
-//
-//   5. 'MetricsCard formats negative drawdown with en-dash not hyphen'
-//      Run optimizer (max_drawdown_p95 = -0.31 in mock).
-//      Assert data-testid="metric-max_drawdown_p95" has text "−31%"
-//      (U+2212 en-dash, not hyphen-minus U+002D).
-//
-//   6. 'ParamForm horizon selector wires through to request body'
-//      Click the "5" horizon button.
-//      Intercept /api/optimize, run optimizer, inspect the POST body.
-//      Assert JSON.parse(body).horizon_years === 5.
+import { expect, test } from '@playwright/test'
+import { setupApiMocks } from './mocks/api'
 
-// TODO: import { test, expect } from '@playwright/test'
-// TODO: import { setupApiMocks, mockOptimizeResult } from './mocks/api'
+async function addTickers(page: import('@playwright/test').Page, tickers: string[]) {
+  const input = page.getByRole('textbox', { name: /search assets/i })
+  for (const ticker of tickers) {
+    await input.fill(ticker)
+    await page.getByRole('option', { name: new RegExp(ticker, 'i') }).click()
+  }
+}
 
-// TODO: test('shows infeasibility error when target return too high', ...)
-// TODO: test('shows sync error message on backend failure', ...)
-// TODO: test('shows "no data — sync first" when assets list is empty', ...)
-// TODO: test('RiskCostTable highlights row matching target return', ...)
-// TODO: test('MetricsCard formats negative drawdown with en-dash not hyphen', ...)
-// TODO: test('ParamForm horizon selector wires through to request body', ...)
+test('shows infeasibility error when target return too high', async ({ page }) => {
+  await setupApiMocks(page, {
+    optimize: {
+      status: 422,
+      body: { detail: JSON.stringify({ error: 'infeasible', max_achievable: 0.14 }) },
+    },
+  })
+  await page.goto('/')
+  await addTickers(page, ['SPY', 'QQQ'])
+  await page.getByRole('button', { name: /run optimizer/i }).click()
+  await expect(page.getByText(/14%/)).toBeVisible()
+  await expect(page.getByText(/not achievable/i)).toBeVisible()
+})
+
+test('shows sync error message on backend failure', async ({ page }) => {
+  await setupApiMocks(page, {
+    sync: { status: 502, body: { detail: 'Yahoo Finance unavailable' } },
+  })
+  await page.goto('/')
+  await addTickers(page, ['SPY'])
+  await page.getByRole('button', { name: /sync data/i }).click()
+  await expect(page.getByText('Yahoo Finance unavailable')).toBeVisible()
+})
+
+test('shows "no data — sync first" when assets list is empty', async ({ page }) => {
+  await setupApiMocks(page, { assets: { assets: [] } })
+  await page.goto('/')
+  await page.getByRole('textbox', { name: /search assets/i }).click()
+  await expect(page.getByText(/no data.*sync first/i)).toBeVisible()
+})
+
+test('RiskCostTable highlights row matching target return', async ({ page }) => {
+  await setupApiMocks(page)
+  await page.goto('/')
+
+  // Default target_return is 12% (0.12) — set it to 20% via slider
+  const slider = page.locator('input[type="range"]').first()
+  await slider.fill('20')
+
+  await addTickers(page, ['SPY', 'QQQ', 'TLT', 'GLD'])
+  await page.getByRole('button', { name: /run optimizer/i }).click()
+
+  const row = page.getByTestId('risk-row-0.20')
+  await expect(row).toBeVisible()
+  await expect(row).toHaveClass(/ring/)
+})
+
+test('MetricsCard formats negative drawdown with en-dash not hyphen', async ({ page }) => {
+  await setupApiMocks(page)
+  await page.goto('/')
+  await addTickers(page, ['SPY', 'QQQ', 'TLT', 'GLD'])
+  await page.getByRole('button', { name: /run optimizer/i }).click()
+
+  const cell = page.getByTestId('metric-max_drawdown_p95')
+  await expect(cell).toBeVisible()
+  const text = await cell.textContent()
+  // Must contain U+2212 (en-dash), not U+002D (hyphen-minus)
+  expect(text).toMatch(/\u221231/)
+  expect(text).not.toMatch(/^-/)
+})
+
+test('ParamForm horizon selector wires through to request body', async ({ page }) => {
+  await setupApiMocks(page)
+  await page.goto('/')
+
+  let capturedBody: string | null = null
+  await page.route('**/api/optimize', async (route) => {
+    capturedBody = route.request().postData()
+    await route.fulfill({ json: {} })
+  })
+
+  // Click the 5Y horizon button
+  await page.getByRole('button', { name: '5Y' }).click()
+
+  await addTickers(page, ['SPY', 'QQQ'])
+  await page.getByRole('button', { name: /run optimizer/i }).click()
+
+  await page.waitForTimeout(200)
+  expect(capturedBody).not.toBeNull()
+  const body = JSON.parse(capturedBody as string) as { horizon_years: number }
+  expect(body.horizon_years).toBe(5)
+})
