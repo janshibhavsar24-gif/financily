@@ -1,107 +1,98 @@
-# risk.py — portfolio risk metrics via Monte Carlo simulation.
-#
-# Pipeline:
-#   simulate_paths → compute_max_drawdown_distribution
-#                  → compute_var_cvar
-#                  → compute_portfolio_metrics (combines all above)
-#
-# Public entry point: compute_portfolio_metrics() — call this from optimizer.py
-# and api/risk.py. All other functions are internal helpers.
-#
-# Rules:
-#   - All functions are pure (no DuckDB, no network calls).
-#   - All stochastic functions accept a seed parameter (default RANDOM_SEED).
-#   - Same seed + same inputs = identical output (reproducibility requirement).
-#   - Drawdown, VaR, CVaR are always returned as NEGATIVE floats.
-#   - Max drawdown p95 <= max drawdown median (both negative).
-#   - CVaR <= VaR (both negative — CVaR is always at least as bad).
+import numpy as np
+from backend.config import N_SIMULATIONS, RANDOM_SEED
 
-# TODO: import numpy as np
-# TODO: from backend.config import N_SIMULATIONS, RANDOM_SEED
 
-# ---------------------------------------------------------------------------
-# Step 1 — Simulate return paths
-# ---------------------------------------------------------------------------
+def simulate_paths(
+    mu: np.ndarray,
+    cov: np.ndarray,
+    weights: np.ndarray,
+    horizon_years: int,
+    n_simulations: int = N_SIMULATIONS,
+    seed: int = RANDOM_SEED,
+) -> np.ndarray:
+    """
+    Draw annual returns via MVN and project portfolio returns.
+    Returns array of shape (n_simulations, horizon_years).
+    """
+    rng = np.random.default_rng(seed)
+    # shape: (n_simulations, horizon_years, n_assets)
+    asset_returns = rng.multivariate_normal(mu, cov, size=(n_simulations, horizon_years))
+    # portfolio return per year per path
+    port_returns = asset_returns @ weights
+    return port_returns
 
-# TODO: def simulate_paths(
-#     mu: np.ndarray,           # shape (n,) — annualised excess returns
-#     cov: np.ndarray,          # shape (n, n) — annualised covariance
-#     weights: np.ndarray,      # shape (n,) — portfolio weights, sum to 1
-#     horizon_years: int,
-#     n_simulations: int = N_SIMULATIONS,
-#     seed: int = RANDOM_SEED,
-# ) -> np.ndarray:
-#   """
-#   Draw n_simulations * horizon_years samples from MVN(mu, cov).
-#   Each draw = one year of asset returns for one path.
-#   Portfolio return per year = weights @ asset_returns.
-#   Return array shape (n_simulations, horizon_years).
-#
-#   Use np.random.default_rng(seed).multivariate_normal(mu, cov, size=(n_simulations, horizon_years))
-#   for efficient vectorised drawing. Avoid loops.
-#   """
 
-# ---------------------------------------------------------------------------
-# Step 2a — Max drawdown distribution
-# ---------------------------------------------------------------------------
+def compute_max_drawdown_distribution(
+    paths: np.ndarray,
+) -> tuple[float, float]:
+    """
+    Compute max drawdown for each path.
+    Returns (median_mdd, p95_mdd) — both negative floats.
+    p95 <= median (both negative).
+    """
+    n_sims, horizon = paths.shape
+    max_drawdowns = np.empty(n_sims)
 
-# TODO: def compute_max_drawdown_distribution(
-#     paths: np.ndarray,    # shape (n_simulations, horizon_years)
-# ) -> tuple[float, float]:
-#   """
-#   For each path:
-#     1. Compute cumulative wealth: cumprod(1 + annual_return)
-#     2. Running peak = cummax of wealth series
-#     3. Drawdown at each step = (peak - wealth) / peak
-#     4. Max drawdown for path = max(drawdown over all steps)
-#
-#   Return (median_max_drawdown, p95_max_drawdown) — both negative floats.
-#   p95 is the 95th percentile of the drawdown distribution (worst tail).
-#   Assert p95 <= median (both negative) before returning.
-#   """
+    for i in range(n_sims):
+        wealth = np.cumprod(1.0 + paths[i])
+        peak = np.maximum.accumulate(wealth)
+        drawdowns = (peak - wealth) / peak
+        max_drawdowns[i] = float(np.max(drawdowns))
 
-# ---------------------------------------------------------------------------
-# Step 2b — VaR and CVaR
-# ---------------------------------------------------------------------------
+    # Both returned as negative floats (drawdown magnitude negated)
+    median_mdd = float(-np.median(max_drawdowns))
+    p95_mdd = float(-np.percentile(max_drawdowns, 95))
 
-# TODO: def compute_var_cvar(
-#     paths: np.ndarray,       # shape (n_simulations, horizon_years)
-#     confidence: float = 0.95,
-# ) -> tuple[float, float]:
-#   """
-#   Compound each path to total return: total[i] = prod(1 + paths[i]) - 1
-#   VaR  = np.percentile(total, (1 - confidence) * 100)   → negative float
-#   CVaR = mean of total[total <= VaR]                     → negative float
-#   Assert CVaR <= VaR before returning.
-#   """
+    return median_mdd, p95_mdd
 
-# ---------------------------------------------------------------------------
-# Public entry point
-# ---------------------------------------------------------------------------
 
-# TODO: def compute_portfolio_metrics(
-#     weights: np.ndarray,
-#     mu: np.ndarray,
-#     cov: np.ndarray,
-#     horizon_years: int,
-#     risk_free_rate: float,
-#     n_simulations: int = N_SIMULATIONS,
-#     seed: int = RANDOM_SEED,
-# ) -> dict:
-#   """
-#   Compute the full metric bundle for a given weight vector.
-#   All metrics are computed from the same simulation draw.
-#
-#   Returns:
-#     {
-#       "expected_return_pretax": float,   # (w @ mu + rf) * 252 — NOT excess
-#       "volatility": float,               # sqrt(w @ cov @ w)
-#       "sharpe_ratio": float,             # (E[r] - rf) / vol
-#       "max_drawdown_median": float,      # negative
-#       "max_drawdown_p95": float,         # negative, <= median
-#       "var_95": float,                   # negative
-#       "cvar_95": float,                  # negative, <= var_95
-#     }
-#   Note: expected_return_pretax is the gross return (rf already added back).
-#   The `mu` passed in is excess return (rf already subtracted in forecaster.py).
-#   """
+def compute_var_cvar(
+    paths: np.ndarray,
+    confidence: float = 0.95,
+) -> tuple[float, float]:
+    """
+    Compound each path to total return over the horizon.
+    VaR  = (1 - confidence) percentile of total returns (negative float).
+    CVaR = mean of total returns <= VaR (negative float).
+    CVaR <= VaR.
+    """
+    total_returns = np.prod(1.0 + paths, axis=1) - 1.0
+    var = float(np.percentile(total_returns, (1.0 - confidence) * 100.0))
+    tail = total_returns[total_returns <= var]
+    cvar = float(np.mean(tail)) if len(tail) > 0 else var
+    return var, cvar
+
+
+def compute_portfolio_metrics(
+    weights: np.ndarray,
+    mu: np.ndarray,
+    cov: np.ndarray,
+    horizon_years: int,
+    risk_free_rate: float,
+    n_simulations: int = N_SIMULATIONS,
+    seed: int = RANDOM_SEED,
+) -> dict:
+    """
+    Compute the full metric bundle for a portfolio weight vector.
+    `mu` is already excess return (rf subtracted in forecaster).
+    expected_return_pretax adds rf back to report the gross return.
+    """
+    paths = simulate_paths(mu, cov, weights, horizon_years, n_simulations, seed)
+
+    median_mdd, p95_mdd = compute_max_drawdown_distribution(paths)
+    var_95, cvar_95 = compute_var_cvar(paths)
+
+    port_excess = float(weights @ mu)
+    expected_return_pretax = port_excess + risk_free_rate
+    volatility = float(np.sqrt(weights @ cov @ weights))
+    sharpe = (expected_return_pretax - risk_free_rate) / volatility if volatility > 0 else 0.0
+
+    return {
+        "expected_return_pretax": expected_return_pretax,
+        "volatility": volatility,
+        "sharpe_ratio": sharpe,
+        "max_drawdown_median": median_mdd,
+        "max_drawdown_p95": p95_mdd,
+        "var_95": var_95,
+        "cvar_95": cvar_95,
+    }

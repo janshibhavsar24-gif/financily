@@ -1,23 +1,22 @@
-# covariance.py — Ledoit-Wolf shrinkage covariance estimation.
-#
-# Rules:
-#   - Always apply Ledoit-Wolf shrinkage — never return raw sample covariance.
-#   - Always annualise: multiply daily covariance by 252.
-#   - Enforce positive semi-definiteness after shrinkage (add jitter if needed).
-#   - The returned matrix is symmetric with shape (n, n).
-#   - Input is a wide daily returns DataFrame (same as from get_returns_matrix).
+import numpy as np
+import pandas as pd
+from sklearn.covariance import LedoitWolf
 
-# TODO: import numpy as np
-# TODO: import pandas as pd
-# TODO: from sklearn.covariance import LedoitWolf
 
-# TODO: def ledoit_wolf_covariance(
-#     returns: pd.DataFrame,   # wide format: index=date, columns=ticker, values=log return
-# ) -> np.ndarray:
-#   """
-#   Fit LedoitWolf() on the daily returns matrix.
-#   Annualise: cov_annual = cov_daily * 252.
-#   Check all eigenvalues >= 0. If any are negative (numerical error),
-#   add jitter: cov += 1e-8 * I.
-#   Return the (n, n) annualised shrunk covariance matrix.
-#   """
+def ledoit_wolf_covariance(returns: pd.DataFrame) -> np.ndarray:
+    """
+    Fit LedoitWolf shrinkage on daily returns, annualise by *252.
+    Enforces PSD by adding jitter if any eigenvalue < 0.
+    Returns symmetric (n, n) annualised covariance matrix.
+    """
+    lw = LedoitWolf()
+    lw.fit(returns.values)
+    cov_daily = lw.covariance_
+    cov_annual = cov_daily * 252.0
+
+    # Enforce PSD
+    eigvals = np.linalg.eigvalsh(cov_annual)
+    if np.any(eigvals < 0):
+        cov_annual += 1e-8 * np.eye(cov_annual.shape[0])
+
+    return cov_annual

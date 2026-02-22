@@ -1,91 +1,57 @@
-# main.py — FastAPI application entry point.
-#
-# Responsibilities:
-#   1. Lifespan handler: initialise DuckDB schema once on startup.
-#   2. Register all API routers.
-#   3. In production: serve the compiled frontend (frontend/dist/) as
-#      static files at "/" so a single `uvicorn backend.main:app` command
-#      runs the entire application.
-#   4. Expose GET /healthz for liveness checks (used by frontend + CLI).
-#
-# Rules:
-#   - No business logic here — only wiring.
-#   - CORS is enabled for localhost origins in dev (controlled by ENV var).
-#   - Static file mount must be registered LAST, after all API routers,
-#     otherwise "/" catches API paths before the routers see them.
-#
-# Run (dev):    uvicorn backend.main:app --reload --port 8000
-# Run (prod):   uvicorn backend.main:app --port 8000
-# Preferred:    financily dev / financily start  (via cli.py)
+from contextlib import asynccontextmanager
+from pathlib import Path
 
-# TODO: from contextlib import asynccontextmanager
-# TODO: from pathlib import Path
-# TODO: import os
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
-# TODO: from fastapi import FastAPI
-# TODO: from fastapi.middleware.cors import CORSMiddleware
-# TODO: from fastapi.staticfiles import StaticFiles
-# TODO: from fastapi.responses import JSONResponse
+from backend.data.db import get_connection, init_schema
+from backend.api.sync import router as sync_router
+from backend.api.assets import router as assets_router
+from backend.api.optimize import router as optimize_router
+from backend.api.risk import router as risk_router
 
-# TODO: from backend.data.db import get_connection, init_schema
-# TODO: from backend.api.sync import router as sync_router
-# TODO: from backend.api.assets import router as assets_router
-# TODO: from backend.api.optimize import router as optimize_router
-# TODO: from backend.api.risk import router as risk_router
 
-# ---------------------------------------------------------------------------
-# Lifespan — runs once at startup and once at shutdown
-# ---------------------------------------------------------------------------
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: ensure DB directory and schema exist
+    from backend.config import DB_PATH
+    Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+    conn = get_connection()
+    init_schema(conn)
+    conn.close()
+    yield
+    # Shutdown: nothing needed (DuckDB auto-closes)
 
-# TODO: @asynccontextmanager
-# TODO: async def lifespan(app: FastAPI):
-#   On startup:
-#     conn = get_connection()
-#     init_schema(conn)
-#     conn.close()
-#   yield
-#   On shutdown: nothing needed (DuckDB auto-closes)
 
-# ---------------------------------------------------------------------------
-# App instantiation
-# ---------------------------------------------------------------------------
+app = FastAPI(title="Financily", lifespan=lifespan)
 
-# TODO: app = FastAPI(title="Financily", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# ---------------------------------------------------------------------------
-# CORS — allow Vite dev server to reach the API without browser errors
-# ---------------------------------------------------------------------------
 
-# TODO: app.add_middleware(
-#   CORSMiddleware,
-#   allow_origins=["http://localhost:5173"],   # Vite dev server
-#   allow_methods=["*"],
-#   allow_headers=["*"],
-# )
+@app.get("/healthz")
+async def healthz():
+    try:
+        conn = get_connection()
+        conn.execute("SELECT 1").fetchone()
+        conn.close()
+        return JSONResponse({"status": "ok"})
+    except Exception as exc:
+        return JSONResponse({"status": "error", "detail": str(exc)}, status_code=503)
 
-# ---------------------------------------------------------------------------
-# Health check — must be registered before static file mount
-# ---------------------------------------------------------------------------
 
-# TODO: @app.get("/healthz")
-# TODO: async def healthz():
-#   Return {"status": "ok"} with HTTP 200.
-#   Also verifies DB is accessible: attempt get_connection(), catch and return 503 if it fails.
+app.include_router(sync_router)
+app.include_router(assets_router)
+app.include_router(optimize_router)
+app.include_router(risk_router)
 
-# ---------------------------------------------------------------------------
-# API routers — all registered before static file mount
-# ---------------------------------------------------------------------------
-
-# TODO: app.include_router(sync_router)
-# TODO: app.include_router(assets_router)
-# TODO: app.include_router(optimize_router)
-# TODO: app.include_router(risk_router)
-
-# ---------------------------------------------------------------------------
-# Static file serving — MUST be last
-# ---------------------------------------------------------------------------
-
-# TODO: FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
-# TODO: if FRONTEND_DIST.is_dir():
-#   app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
-#   html=True enables SPA fallback: non-API paths return index.html
+# Static file serving — MUST be registered last
+FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
+if FRONTEND_DIST.is_dir():
+    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
