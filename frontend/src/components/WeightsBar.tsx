@@ -1,4 +1,3 @@
-
 interface Props {
   weights: Record<string, number>
 }
@@ -38,14 +37,10 @@ export default function WeightsBar({ weights }: Props) {
                 className={`h-full ${tickerColor(ticker)} flex items-center px-2`}
                 style={{ width: `${pct}%` }}
               >
-                {pct >= 8 && (
-                  <span className="text-white text-xs font-semibold">{pct}%</span>
-                )}
+                {pct >= 8 && <span className="text-white text-xs font-semibold">{pct}%</span>}
               </div>
             </div>
-            {pct < 8 && (
-              <span className="text-xs text-gray-500">{pct}%</span>
-            )}
+            {pct < 8 && <span className="text-xs text-gray-500">{pct}%</span>}
           </div>
         )
       })}

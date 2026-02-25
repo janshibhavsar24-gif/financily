@@ -7,9 +7,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('empty state shown on load', async ({ page }) => {
-  await expect(
-    page.getByText(/select assets.*run the optimizer/i),
-  ).toBeVisible()
+  await expect(page.getByText(/select assets.*run optimizer/i)).toBeVisible()
 })
 
 test('asset selector populates from /api/assets', async ({ page }) => {
@@ -44,7 +42,10 @@ test('happy path: full optimize run renders all result panels', async ({ page })
   const input = page.getByRole('textbox', { name: /search assets/i })
   for (const ticker of ['SPY', 'QQQ', 'TLT', 'GLD']) {
     await input.fill(ticker)
-    await page.getByRole('option', { name: new RegExp(ticker, 'i') }).click()
+    const option = page.getByRole('option', { name: new RegExp(ticker, 'i') })
+    await expect(option).toBeVisible()
+    await option.dispatchEvent('mousedown')
+    await expect(page.getByTestId(`chip-${ticker}`)).toBeVisible()
   }
 
   await page.getByRole('button', { name: /run optimizer/i }).click()
@@ -65,8 +66,10 @@ test('run optimizer button is disabled while loading', async ({ page }) => {
   const input = page.getByRole('textbox', { name: /search assets/i })
   await input.fill('SPY')
   await page.getByRole('option', { name: /SPY/i }).click()
+  await input.fill('QQQ')
+  await page.getByRole('option', { name: /QQQ/i }).click()
 
   const btn = page.getByRole('button', { name: /run optimizer/i })
   await btn.click()
-  await expect(btn).toBeDisabled()
+  await expect(page.getByRole('button', { name: /optimizing/i })).toBeDisabled()
 })

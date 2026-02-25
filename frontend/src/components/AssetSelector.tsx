@@ -79,31 +79,33 @@ export default function AssetSelector({ selected, onChange }: Props) {
         />
 
         {open && (
-          <ul
+          <div
             role="listbox"
+            tabIndex={-1}
             className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto"
           >
             {fetchError ? (
-              <li className="px-3 py-2 text-sm text-red-600">{fetchError}</li>
+              <div className="px-3 py-2 text-sm text-red-600">{fetchError}</div>
             ) : filtered.length === 0 ? (
-              <li className="px-3 py-2 text-sm text-gray-400">
+              <div className="px-3 py-2 text-sm text-gray-400">
                 {assets.length === 0 ? 'No data — sync first' : 'No matches'}
-              </li>
+              </div>
             ) : (
               filtered.map((asset) => (
-                <li
+                <div
                   key={asset.ticker}
                   role="option"
+                  tabIndex={-1}
                   aria-selected={false}
                   onMouseDown={() => addTicker(asset.ticker)}
                   className="flex justify-between px-3 py-2 text-sm cursor-pointer hover:bg-blue-50"
                 >
                   <span className="font-semibold text-gray-900">{asset.ticker}</span>
                   <span className="text-gray-400 truncate ml-2">{asset.name}</span>
-                </li>
+                </div>
               ))
             )}
-          </ul>
+          </div>
         )}
       </div>
     </div>

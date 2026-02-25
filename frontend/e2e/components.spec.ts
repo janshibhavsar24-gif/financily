@@ -5,7 +5,10 @@ async function addTickers(page: import('@playwright/test').Page, tickers: string
   const input = page.getByRole('textbox', { name: /search assets/i })
   for (const ticker of tickers) {
     await input.fill(ticker)
-    await page.getByRole('option', { name: new RegExp(ticker, 'i') }).click()
+    const option = page.getByRole('option', { name: new RegExp(ticker, 'i') })
+    await expect(option).toBeVisible()
+    await option.dispatchEvent('mousedown')
+    await expect(page.getByTestId(`chip-${ticker}`)).toBeVisible()
   }
 }
 
@@ -51,7 +54,7 @@ test('RiskCostTable highlights row matching target return', async ({ page }) => 
   await addTickers(page, ['SPY', 'QQQ', 'TLT', 'GLD'])
   await page.getByRole('button', { name: /run optimizer/i }).click()
 
-  const row = page.getByTestId('risk-row-0.20')
+  const row = page.getByTestId('risk-row-0.2')
   await expect(row).toBeVisible()
   await expect(row).toHaveClass(/ring/)
 })

@@ -1,19 +1,20 @@
 import { useState } from 'react'
-import { useOptimize } from './hooks/useOptimize'
 import AssetSelector from './components/AssetSelector'
-import SyncButton from './components/SyncButton'
-import ParamForm from './components/ParamForm'
-import WeightsBar from './components/WeightsBar'
-import MetricsCard from './components/MetricsCard'
-import RiskCostTable from './components/RiskCostTable'
 import ForecastTable from './components/ForecastTable'
+import MetricsCard from './components/MetricsCard'
+import ParamForm from './components/ParamForm'
+import RiskCostTable from './components/RiskCostTable'
+import SyncButton from './components/SyncButton'
+import WeightsBar from './components/WeightsBar'
+// useCallback and useRef imported below with AssetSelector
+import { useOptimize } from './hooks/useOptimize'
 import type { OptimizeRequest } from './types/api'
 
 const DEFAULT_REQUEST: OptimizeRequest = {
   tickers: [],
   target_return: 0.12,
   horizon_years: 3,
-  max_weight: 0.40,
+  max_weight: 0.4,
   tax_rate_lt: 0.15,
   tax_rate_st: 0.37,
   n_simulations: 5000,
@@ -25,6 +26,7 @@ export default function App() {
   const { state, run, reset } = useOptimize()
 
   function handleSubmit() {
+    if (selectedTickers.length < 2) return
     run({ ...params, tickers: selectedTickers })
   }
 
@@ -57,10 +59,7 @@ export default function App() {
             <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
               Assets
             </h2>
-            <AssetSelector
-              selected={selectedTickers}
-              onChange={handleTickersChange}
-            />
+            <AssetSelector selected={selectedTickers} onChange={handleTickersChange} />
           </section>
 
           {/* Sync */}
@@ -78,6 +77,7 @@ export default function App() {
               onChange={handleParamsChange}
               loading={state.loading}
               onSubmit={handleSubmit}
+              tickerCount={selectedTickers.length}
             />
           </section>
         </div>
@@ -89,6 +89,7 @@ export default function App() {
           <div className="flex items-center justify-center h-64">
             <div className="text-center space-y-3">
               <svg
+                aria-hidden={true}
                 className="animate-spin h-10 w-10 text-blue-600 mx-auto"
                 viewBox="0 0 24 24"
                 fill="none"
@@ -101,11 +102,7 @@ export default function App() {
                   stroke="currentColor"
                   strokeWidth="4"
                 />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8v8H4z"
-                />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
               </svg>
               <p className="text-sm text-gray-500">Running optimizer…</p>
             </div>

@@ -21,7 +21,7 @@ export const mockOptimizeResult: OptimizeResponse = {
   run_id: 'test-run-001',
   feasible: true,
   optimal_portfolio: {
-    weights: { SPY: 0.40, QQQ: 0.30, TLT: 0.20, GLD: 0.10 },
+    weights: { SPY: 0.4, QQQ: 0.3, TLT: 0.2, GLD: 0.1 },
     expected_return_pretax: 0.142,
     expected_return_aftertax: 0.121,
     volatility: 0.148,
@@ -32,22 +32,22 @@ export const mockOptimizeResult: OptimizeResponse = {
     cvar_95: -0.28,
   },
   risk_cost_table: [
-    { target_return: 0.05, min_drawdown_p95: -0.08, volatility: 0.07, cvar_95: -0.10 },
-    { target_return: 0.08, min_drawdown_p95: -0.12, volatility: 0.10, cvar_95: -0.14 },
-    { target_return: 0.10, min_drawdown_p95: -0.15, volatility: 0.12, cvar_95: -0.18 },
+    { target_return: 0.05, min_drawdown_p95: -0.08, volatility: 0.07, cvar_95: -0.1 },
+    { target_return: 0.08, min_drawdown_p95: -0.12, volatility: 0.1, cvar_95: -0.14 },
+    { target_return: 0.1, min_drawdown_p95: -0.15, volatility: 0.12, cvar_95: -0.18 },
     { target_return: 0.12, min_drawdown_p95: -0.18, volatility: 0.14, cvar_95: -0.21 },
     { target_return: 0.14, min_drawdown_p95: -0.21, volatility: 0.16, cvar_95: -0.24 },
     { target_return: 0.16, min_drawdown_p95: -0.24, volatility: 0.18, cvar_95: -0.27 },
-    { target_return: 0.18, min_drawdown_p95: -0.27, volatility: 0.20, cvar_95: -0.30 },
-    { target_return: 0.20, min_drawdown_p95: -0.30, volatility: 0.22, cvar_95: -0.33 },
+    { target_return: 0.18, min_drawdown_p95: -0.27, volatility: 0.2, cvar_95: -0.3 },
+    { target_return: 0.2, min_drawdown_p95: -0.3, volatility: 0.22, cvar_95: -0.33 },
     { target_return: 0.22, min_drawdown_p95: -0.33, volatility: 0.24, cvar_95: -0.37 },
     { target_return: 0.25, min_drawdown_p95: -0.38, volatility: 0.27, cvar_95: -0.42 },
-    { target_return: 0.28, min_drawdown_p95: -0.43, volatility: 0.30, cvar_95: -0.47 },
-    { target_return: 0.30, min_drawdown_p95: -0.47, volatility: 0.33, cvar_95: -0.52 },
-    { target_return: 0.35, min_drawdown_p95: -0.55, volatility: 0.38, cvar_95: -0.60 },
-    { target_return: 0.40, min_drawdown_p95: -0.62, volatility: 0.43, cvar_95: -0.68 },
+    { target_return: 0.28, min_drawdown_p95: -0.43, volatility: 0.3, cvar_95: -0.47 },
+    { target_return: 0.3, min_drawdown_p95: -0.47, volatility: 0.33, cvar_95: -0.52 },
+    { target_return: 0.35, min_drawdown_p95: -0.55, volatility: 0.38, cvar_95: -0.6 },
+    { target_return: 0.4, min_drawdown_p95: -0.62, volatility: 0.43, cvar_95: -0.68 },
     { target_return: 0.45, min_drawdown_p95: -0.69, volatility: 0.48, cvar_95: -0.76 },
-    { target_return: 0.50, min_drawdown_p95: -0.76, volatility: 0.53, cvar_95: -0.84 },
+    { target_return: 0.5, min_drawdown_p95: -0.76, volatility: 0.53, cvar_95: -0.84 },
   ],
   forecasts: {
     SPY: { mu: 0.082, sigma: 0.161 },
@@ -81,7 +81,11 @@ export async function setupApiMocks(
   await page.route('**/api/assets', async (route) => {
     const override = o.assets
     if (isErrorOverride(override)) {
-      await route.fulfill({ status: override.status, contentType: 'application/json', body: JSON.stringify(override.body) })
+      await route.fulfill({
+        status: override.status,
+        contentType: 'application/json',
+        body: JSON.stringify(override.body),
+      })
     } else {
       await route.fulfill({ json: override ?? mockAssets })
     }
@@ -90,7 +94,11 @@ export async function setupApiMocks(
   await page.route('**/api/sync', async (route) => {
     const override = o.sync
     if (isErrorOverride(override)) {
-      await route.fulfill({ status: override.status, contentType: 'application/json', body: JSON.stringify(override.body) })
+      await route.fulfill({
+        status: override.status,
+        contentType: 'application/json',
+        body: JSON.stringify(override.body),
+      })
     } else {
       await route.fulfill({ json: override ?? mockSyncSuccess })
     }
@@ -99,7 +107,11 @@ export async function setupApiMocks(
   await page.route('**/api/optimize', async (route) => {
     const override = o.optimize
     if (isErrorOverride(override)) {
-      await route.fulfill({ status: override.status, contentType: 'application/json', body: JSON.stringify(override.body) })
+      await route.fulfill({
+        status: override.status,
+        contentType: 'application/json',
+        body: JSON.stringify(override.body),
+      })
     } else {
       await route.fulfill({ json: override ?? mockOptimizeResult })
     }

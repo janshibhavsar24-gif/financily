@@ -71,6 +71,16 @@
           }
         }
       }
+    },
+    {
+      "include": ["src/components/AssetSelector.tsx"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useSemanticElements": "off"
+          }
+        }
+      }
     }
   ]
 }

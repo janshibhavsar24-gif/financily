@@ -34,14 +34,22 @@ export function useOptimize(): {
           if (
             parsed !== null &&
             typeof parsed === 'object' &&
+            !Array.isArray(parsed) &&
             'error' in parsed &&
             (parsed as InfeasibilityDetail).error === 'infeasible' &&
             'max_achievable' in parsed
           ) {
+            // Infeasibility error from the optimizer
             const detail = parsed as InfeasibilityDetail
             const pct = Math.round(detail.max_achievable * 100)
             const targetPct = Math.round(req.target_return * 100)
             errorMsg = `Target return of ${targetPct}% is not achievable. Max achievable: ${pct}%.`
+          } else if (Array.isArray(parsed)) {
+            // Pydantic validation errors — extract human-readable messages
+            const messages = (parsed as Array<{ msg?: string; loc?: string[] }>)
+              .map((e) => e.msg ?? 'Validation error')
+              .join(', ')
+            errorMsg = messages
           } else {
             errorMsg = err.detail
           }

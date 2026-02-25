@@ -52,9 +52,7 @@ export default function RiskCostTable({ rows, targetReturn }: Props) {
                 data-testid={`risk-row-${row.target_return}`}
                 className={[
                   'border-b border-gray-100 transition-colors',
-                  isHighlighted
-                    ? 'bg-blue-50 ring-2 ring-inset ring-blue-500'
-                    : 'hover:bg-gray-50',
+                  isHighlighted ? 'bg-blue-50 ring-2 ring-inset ring-blue-500' : 'hover:bg-gray-50',
                 ].join(' ')}
               >
                 <td className="py-2 px-3 font-medium text-gray-900">{pct(row.target_return)}</td>

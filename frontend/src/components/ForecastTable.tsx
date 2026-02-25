@@ -17,7 +17,9 @@ export default function ForecastTable({ forecasts }: Props) {
           <tr className="border-b border-gray-200">
             <th className="text-left py-2 px-3 font-semibold text-gray-700">Ticker</th>
             <th className="text-right py-2 px-3 font-semibold text-gray-700">Exp. Excess Return</th>
-            <th className="text-right py-2 px-3 font-semibold text-gray-700">Forecast Volatility</th>
+            <th className="text-right py-2 px-3 font-semibold text-gray-700">
+              Forecast Volatility
+            </th>
           </tr>
         </thead>
         <tbody>
