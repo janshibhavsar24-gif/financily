@@ -3,10 +3,29 @@ export interface AssetInfo {
   name: string
   latest_date: string
   rows: number
+  quality_score: number
+  asset_type: string | null
+  sector: string | null
 }
 
 export interface AssetsResponse {
   assets: AssetInfo[]
+}
+
+export interface SearchResult {
+  symbol: string
+  name: string
+  asset_type: string | null
+  sector: string | null
+  country: string | null
+  exchange: string | null
+  is_synced: boolean
+  quality_score: number | null
+}
+
+export interface SearchResponse {
+  results: SearchResult[]
+  total: number
 }
 
 export interface SyncRequest {
@@ -19,6 +38,7 @@ export interface SyncResponse {
   tickers_synced: number
   rows_upserted: number
   latest_date: string
+  unknown_tickers: string[]
 }
 
 export interface OptimizeRequest {
@@ -61,6 +81,7 @@ export interface OptimizeResponse {
   optimal_portfolio: PortfolioMetrics
   risk_cost_table: RiskCostRow[]
   forecasts: Record<string, AssetForecast>
+  warnings: string[]
 }
 
 export interface InfeasibilityDetail {

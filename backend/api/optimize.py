@@ -12,10 +12,11 @@ from backend.config import (
 )
 from backend.data.db import get_connection
 from backend.data.fetcher import fetch_risk_free_rate
+from backend.data.universe import get_quality
 from backend.engine.covariance import ledoit_wolf_covariance
 from backend.engine.forecaster import forecast_returns, get_returns_matrix
 from backend.engine.optimizer import (
-    check_feasibility, compute_risk_cost_table, optimize_portfolio
+    check_feasibility, compute_risk_cost_table, find_best_feasible_target, optimize_portfolio
 )
 from backend.engine.risk import compute_portfolio_metrics
 from backend.engine.tax import after_tax_return, estimate_turnover
@@ -78,6 +79,7 @@ class OptimizeResponse(BaseModel):
     optimal_portfolio: PortfolioMetrics
     risk_cost_table: list[RiskCostRow]
     forecasts: dict[str, AssetForecast]
+    warnings: list[str]
 
 
 def _run_pipeline(body: OptimizeRequest) -> OptimizeResponse:
@@ -91,6 +93,17 @@ def _run_pipeline(body: OptimizeRequest) -> OptimizeResponse:
         # Only use the requested tickers for covariance (not MARKET_TICKER extras)
         tickers_in_returns = [t for t in body.tickers if t in returns_wide.columns]
         cov = ledoit_wolf_covariance(returns_wide[tickers_in_returns])
+        n_complete_rows = len(returns_wide)
+
+        # Collect data-quality warnings (non-blocking)
+        quality_warnings: list[str] = []
+        for ticker in body.tickers:
+            score = get_quality(conn, ticker)
+            if score is not None and score < 0.5:
+                quality_warnings.append(
+                    f"{ticker} has limited data history (quality score: {score:.2f}) "
+                    "— forecasts may be unreliable. Consider running /api/sync."
+                )
 
         # Step 4: feasibility check (mu is excess return)
         feasible, max_achievable = check_feasibility(mu, body.target_return, body.max_weight)
@@ -101,13 +114,36 @@ def _run_pipeline(body: OptimizeRequest) -> OptimizeResponse:
             }))
 
         # Step 5: optimize
-        weights_arr = optimize_portfolio(
-            mu, cov,
-            target_return=body.target_return,
-            horizon_years=body.horizon_years,
-            max_weight=body.max_weight,
-            n_simulations=body.n_simulations,
-        )
+        try:
+            weights_arr = optimize_portfolio(
+                mu, cov,
+                target_return=body.target_return,
+                horizon_years=body.horizon_years,
+                max_weight=body.max_weight,
+                n_simulations=body.n_simulations,
+            )
+        except RuntimeError:
+            recommended = find_best_feasible_target(
+                mu, cov,
+                horizon_years=body.horizon_years,
+                max_weight=body.max_weight,
+            )
+            if recommended is not None:
+                rf = fetch_risk_free_rate()
+                raise ValueError(json.dumps({
+                    "error": "convergence_failed",
+                    "requested_target": round(body.target_return, 4),
+                    "recommended_target": round(recommended, 4),
+                    "recommended_target_gross": round(recommended + rf, 4),
+                }))
+            sparse_hint = (
+                f" Only {n_complete_rows} complete trading days found across all tickers "
+                f"(need 252+ for reliable estimates); one or more assets may have limited history."
+            ) if n_complete_rows < 252 else ""
+            raise ValueError(
+                f"Optimization failed to converge even at low return targets.{sparse_hint} "
+                "Try removing thinly-traded assets, running /api/sync, or raising max_weight."
+            )
 
         # Step 6: portfolio metrics
         rf = fetch_risk_free_rate()
@@ -173,6 +209,7 @@ def _run_pipeline(body: OptimizeRequest) -> OptimizeResponse:
             optimal_portfolio=portfolio,
             risk_cost_table=[RiskCostRow(**r) for r in table_rows],
             forecasts={t: AssetForecast(**v) for t, v in meta.items()},
+            warnings=quality_warnings,
         )
     finally:
         conn.close()

@@ -21,7 +21,15 @@ def check_feasibility(
     Conservative feasibility check: max achievable = max(mu) + rf (rf already in mu as excess).
     We use max single-asset excess return as upper bound.
     Returns (is_feasible, max_achievable).
+    Raises ValueError if weight constraints are structurally infeasible (n * max_weight < 1).
     """
+    n = len(mu)
+    if n * max_weight < 1.0:
+        min_assets = int(np.ceil(1.0 / max_weight))
+        raise ValueError(
+            f"max_weight={max_weight:.0%} requires at least {min_assets} assets to form a valid "
+            f"portfolio (weights must sum to 1), but only {n} provided."
+        )
     # max achievable excess return (if we could put 100% in best asset)
     max_achievable = float(np.max(mu))
     is_feasible = max_achievable >= target_return
@@ -97,6 +105,39 @@ def optimize_portfolio(
     best_weights = np.clip(best_weights, 0.0, max_weight)
     best_weights /= best_weights.sum()
     return best_weights
+
+
+def find_best_feasible_target(
+    mu: np.ndarray,
+    cov: np.ndarray,
+    horizon_years: int,
+    max_weight: float = MAX_WEIGHT,
+    n_steps: int = 10,
+    seed: int = RANDOM_SEED,
+) -> float | None:
+    """
+    Sweep from near-zero to 0.95*max(mu) and return the highest target_return at which
+    the optimizer converges. Uses lightweight settings for speed.
+    Returns None if no target converges.
+    """
+    max_excess = float(np.max(mu))
+    if max_excess <= 0:
+        return None
+    targets = np.linspace(0.01 * max_excess, 0.95 * max_excess, n_steps)
+    best: float | None = None
+    for target in targets:
+        try:
+            optimize_portfolio(
+                mu, cov, float(target), horizon_years,
+                max_weight=max_weight,
+                n_simulations=500,
+                n_starts=2,
+                seed=seed,
+            )
+            best = float(target)
+        except RuntimeError:
+            continue
+    return best
 
 
 def compute_risk_cost_table(

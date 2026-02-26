@@ -48,3 +48,25 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
             result        VARCHAR
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS asset_universe (
+            symbol     VARCHAR PRIMARY KEY,
+            name       VARCHAR,
+            asset_type VARCHAR,
+            sector     VARCHAR,
+            industry   VARCHAR,
+            country    VARCHAR,
+            exchange   VARCHAR,
+            currency   VARCHAR
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS asset_quality (
+            ticker         VARCHAR PRIMARY KEY,
+            quality_score  DOUBLE,
+            row_count      INTEGER,
+            history_years  DOUBLE,
+            max_gap_days   INTEGER,
+            latest_date    DATE
+        )
+    """)

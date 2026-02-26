@@ -3,6 +3,7 @@ import type {
   OptimizeRequest,
   OptimizeResponse,
   PortfolioMetrics,
+  SearchResponse,
   SyncRequest,
   SyncResponse,
 } from '../types/api'
@@ -34,6 +35,19 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export async function listAssets(): Promise<AssetsResponse> {
   return request<AssetsResponse>('/api/assets')
+}
+
+export async function searchAssets(
+  q: string,
+  type?: string,
+  sector?: string,
+  country?: string,
+): Promise<SearchResponse> {
+  const params = new URLSearchParams({ q })
+  if (type) params.set('type', type)
+  if (sector) params.set('sector', sector)
+  if (country) params.set('country', country)
+  return request<SearchResponse>(`/api/search?${params}`)
 }
 
 export async function syncTickers(req: SyncRequest): Promise<SyncResponse> {
