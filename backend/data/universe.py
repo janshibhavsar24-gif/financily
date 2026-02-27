@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import math
 from datetime import date
+from typing import Optional
 
 import duckdb
 import pandas as pd
@@ -141,7 +141,7 @@ def search_universe(
 def get_asset_metadata(
     conn: duckdb.DuckDBPyConnection,
     ticker: str,
-) -> dict | None:
+) -> Optional[dict]:
     """Return asset_universe metadata for a single ticker, or None if not found."""
     row = conn.execute(
         "SELECT asset_type, sector, industry, country, exchange, currency "
@@ -248,7 +248,7 @@ def compute_and_store_quality(
     return score
 
 
-def get_quality(conn: duckdb.DuckDBPyConnection, ticker: str) -> float | None:
+def get_quality(conn: duckdb.DuckDBPyConnection, ticker: str) -> Optional[float]:
     """Return cached quality score for a ticker, or None if not computed yet."""
     row = conn.execute(
         "SELECT quality_score FROM asset_quality WHERE ticker = ?",

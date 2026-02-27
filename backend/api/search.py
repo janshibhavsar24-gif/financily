@@ -1,4 +1,4 @@
-from __future__ import annotations
+from typing import Optional
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
@@ -12,12 +12,12 @@ router = APIRouter()
 class SearchResult(BaseModel):
     symbol: str
     name: str
-    asset_type: str | None
-    sector: str | None
-    country: str | None
-    exchange: str | None
+    asset_type: Optional[str]
+    sector: Optional[str]
+    country: Optional[str]
+    exchange: Optional[str]
     is_synced: bool
-    quality_score: float | None
+    quality_score: Optional[float]
 
 
 class SearchResponse(BaseModel):
@@ -28,9 +28,9 @@ class SearchResponse(BaseModel):
 @router.get("/api/search", response_model=SearchResponse)
 def search_assets(
     q: str = Query(..., min_length=1, description="Ticker prefix or name substring"),
-    type: str | None = Query(default=None, description="equity | etf | fund | index"),
-    sector: str | None = Query(default=None),
-    country: str | None = Query(default=None),
+    type: Optional[str] = Query(default=None, description="equity | etf | fund | index"),
+    sector: Optional[str] = Query(default=None),
+    country: Optional[str] = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
 ) -> SearchResponse:
     conn = get_connection()

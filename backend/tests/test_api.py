@@ -42,6 +42,8 @@ def client(tmp_path, monkeypatch):
     Provide a TestClient with:
       - DB_PATH pointed at a temp DuckDB file.
       - fetch_prices monkeypatched to return fixture CSV data.
+      - init_asset_universe monkeypatched to a no-op (avoids live network download).
+      - _resolve_name monkeypatched to return ticker directly (avoids live yfinance call).
     Schema is initialised automatically by the lifespan handler.
     """
     db_path = str(tmp_path / "test.duckdb")
@@ -50,6 +52,11 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr("backend.data.db.DB_PATH", db_path)
     monkeypatch.setattr("backend.data.fetcher.fetch_prices", _mock_fetch_prices)
     monkeypatch.setattr("backend.data.sync.fetch_prices", _mock_fetch_prices)
+    # Prevent live FinanceDatabase network download during tests
+    monkeypatch.setattr("backend.data.universe.init_asset_universe", lambda conn: None)
+    monkeypatch.setattr("backend.main._init_universe", lambda: None)
+    # Prevent live yfinance name resolution during tests
+    monkeypatch.setattr("backend.api.assets._resolve_name", lambda ticker: ticker)
 
     from backend.main import app
     with TestClient(app) as c:
