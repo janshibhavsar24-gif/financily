@@ -74,11 +74,17 @@ export default function DueDiligencePage() {
               onSelect={setActiveTab}
               onClose={handleCloseTab}
             />
-            <div className="flex-1 min-h-0 overflow-hidden">
-              {activeTab && openTabs.includes(activeTab) && (
-                // Key forces StockTab to fully remount (and restart report) when ticker changes
-                <StockTab key={activeTab} ticker={activeTab} />
-              )}
+            {/* Render all tabs simultaneously; only the active one is visible.
+                This preserves each tab's report text and chat history across switches. */}
+            <div className="flex-1 min-h-0 overflow-hidden relative">
+              {openTabs.map((ticker) => (
+                <div
+                  key={ticker}
+                  className={`absolute inset-0 ${ticker === activeTab ? 'block' : 'hidden'}`}
+                >
+                  <StockTab ticker={ticker} />
+                </div>
+              ))}
             </div>
           </>
         )}

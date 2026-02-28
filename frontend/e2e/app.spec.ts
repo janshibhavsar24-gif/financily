@@ -63,11 +63,20 @@ test('run optimizer button is disabled while loading', async ({ page }) => {
     await route.fulfill({ json: {} })
   })
 
+  // Use mousedown (not click) so the input blur handler doesn't race with the
+  // 300ms search debounce when adding the second ticker.
   const input = page.getByRole('textbox', { name: /search assets/i })
   await input.fill('SPY')
-  await page.getByRole('option', { name: /SPY/i }).click()
+  const spyOption = page.getByRole('option', { name: /SPY/i })
+  await expect(spyOption).toBeVisible()
+  await spyOption.dispatchEvent('mousedown')
+  await expect(page.getByTestId('chip-SPY')).toBeVisible()
+
   await input.fill('QQQ')
-  await page.getByRole('option', { name: /QQQ/i }).click()
+  const qqqOption = page.getByRole('option', { name: /QQQ/i })
+  await expect(qqqOption).toBeVisible()
+  await qqqOption.dispatchEvent('mousedown')
+  await expect(page.getByTestId('chip-QQQ')).toBeVisible()
 
   const btn = page.getByRole('button', { name: /run optimizer/i })
   await btn.click()

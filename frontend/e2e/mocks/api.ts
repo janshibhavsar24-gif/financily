@@ -1,13 +1,86 @@
 import type { Page } from '@playwright/test'
-import type { AssetsResponse, OptimizeResponse, SyncResponse } from '../../src/types/api'
+import type {
+  AssetsResponse,
+  OptimizeResponse,
+  SearchResponse,
+  SyncResponse,
+} from '../../src/types/api'
+
+// ---------------------------------------------------------------------------
+// Static mock data
+// ---------------------------------------------------------------------------
 
 export const mockAssets: AssetsResponse = {
   assets: [
-    { ticker: 'SPY', name: 'SPDR S&P 500 ETF', latest_date: '2026-02-19', rows: 2520 },
-    { ticker: 'QQQ', name: 'Invesco QQQ Trust', latest_date: '2026-02-19', rows: 2520 },
-    { ticker: 'TLT', name: 'iShares 20+ Year Treasury', latest_date: '2026-02-19', rows: 2520 },
-    { ticker: 'GLD', name: 'SPDR Gold Shares', latest_date: '2026-02-19', rows: 2520 },
+    {
+      ticker: 'SPY',
+      name: 'SPDR S&P 500 ETF',
+      latest_date: '2026-02-19',
+      rows: 2520,
+      quality_score: 0.97,
+      asset_type: 'etf',
+      sector: null,
+    },
+    {
+      ticker: 'QQQ',
+      name: 'Invesco QQQ Trust',
+      latest_date: '2026-02-19',
+      rows: 2520,
+      quality_score: 0.95,
+      asset_type: 'etf',
+      sector: null,
+    },
+    {
+      ticker: 'TLT',
+      name: 'iShares 20+ Year Treasury',
+      latest_date: '2026-02-19',
+      rows: 2520,
+      quality_score: 0.94,
+      asset_type: 'etf',
+      sector: null,
+    },
+    {
+      ticker: 'GLD',
+      name: 'SPDR Gold Shares',
+      latest_date: '2026-02-19',
+      rows: 2520,
+      quality_score: 0.93,
+      asset_type: 'etf',
+      sector: null,
+    },
+    {
+      ticker: 'AAPL',
+      name: 'Apple Inc.',
+      latest_date: '2026-02-19',
+      rows: 2520,
+      quality_score: 0.98,
+      asset_type: 'equity',
+      sector: 'Technology',
+    },
+    {
+      ticker: 'MSFT',
+      name: 'Microsoft Corporation',
+      latest_date: '2026-02-19',
+      rows: 2520,
+      quality_score: 0.97,
+      asset_type: 'equity',
+      sector: 'Technology',
+    },
   ],
+}
+
+export const mockSearchResults: SearchResponse = {
+  results: mockAssets.assets.map((a) => ({
+    symbol: a.ticker,
+    name: a.name,
+    asset_type: a.asset_type,
+    sector: a.sector,
+    country: 'United States',
+    exchange: 'NMS',
+    is_synced: true,
+    quality_score: a.quality_score,
+  })),
+  total: mockAssets.assets.length,
 }
 
 export const mockSyncSuccess: SyncResponse = {
@@ -15,6 +88,7 @@ export const mockSyncSuccess: SyncResponse = {
   tickers_synced: 4,
   rows_upserted: 120,
   latest_date: '2026-02-19',
+  unknown_tickers: [],
 }
 
 export const mockOptimizeResult: OptimizeResponse = {
@@ -55,7 +129,54 @@ export const mockOptimizeResult: OptimizeResponse = {
     TLT: { mu: 0.021, sigma: 0.142 },
     GLD: { mu: 0.038, sigma: 0.155 },
   },
+  warnings: [],
 }
+
+// ---------------------------------------------------------------------------
+// SSE helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a complete SSE response body from an array of event payloads.
+ * All events are delivered in a single response (Playwright fulfills responses
+ * atomically). The client-side SSE parser handles multi-event bodies correctly.
+ */
+export function sseBody(events: Array<Record<string, unknown>>): string {
+  return events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('')
+}
+
+export const MOCK_DD_REPORT_AAPL = sseBody([
+  { type: 'token', content: '# Apple Inc. (AAPL)\n\n' },
+  { type: 'token', content: '## 1. Business Quality\n\n' },
+  { type: 'token', content: 'Apple designs and markets consumer electronics, software, and services.\n\n' },
+  { type: 'token', content: '## 2. Financial Strength\n\n**Total Debt:** $108B  **Cash:** $67B\n\n' },
+  { type: 'token', content: '## 3. Profitability\n\n**Gross Margin:** 46%  **Net Margin:** 26%\n\n' },
+  { type: 'token', content: '## 4. Growth\n\nRevenue CAGR (5Y): +9%\n\n' },
+  { type: 'token', content: '## 5. Valuation\n\n**P/E:** 31x  **PEG:** 2.8\n\n' },
+  { type: 'token', content: '## 6. Risk\n\n**Beta:** 1.24\n\n' },
+  { type: 'token', content: '## 7. Competitive Position\n\nDominant brand moat, high switching costs.\n\n' },
+  { type: 'token', content: '## 8. Catalysts\n\nNext earnings: May 2026.\n\n' },
+  { type: 'token', content: '| Category | Score |\n|---|---|\n| Financial Strength | 4 |\n\n' },
+  { type: 'token', content: '**30% revenue drop:** AAPL would survive — $67B cash cushion.\n' },
+  { type: 'done', input_tokens: 1540, output_tokens: 980 },
+])
+
+export const MOCK_DD_REPORT_MSFT = sseBody([
+  { type: 'token', content: '# Microsoft Corporation (MSFT)\n\n' },
+  { type: 'token', content: '## 1. Business Quality\n\nMicrosoft provides cloud, productivity, and gaming products.\n\n' },
+  { type: 'token', content: '**30% revenue drop:** MSFT would survive with strong Azure margins.\n' },
+  { type: 'done', input_tokens: 1400, output_tokens: 800 },
+])
+
+export const MOCK_DD_CHAT_RESPONSE = sseBody([
+  { type: 'token', content: "AAPL's D/E ratio is approximately 1.8x, " },
+  { type: 'token', content: 'which is higher than MSFT at 0.4x but manageable given its free cash flow.' },
+  { type: 'done' },
+])
+
+// ---------------------------------------------------------------------------
+// Mock setup
+// ---------------------------------------------------------------------------
 
 type ErrorOverride = { status: number; body: object }
 
@@ -68,37 +189,59 @@ function isErrorOverride(x: unknown): x is ErrorOverride {
   )
 }
 
+export type DdReportOverride =
+  | { body: string }              // custom SSE body string
+  | { status: number; body: object } // HTTP error
+
+export interface SetupApiMocksOptions {
+  assets?: AssetsResponse | ErrorOverride
+  sync?: SyncResponse | ErrorOverride
+  optimize?: OptimizeResponse | ErrorOverride
+  search?: SearchResponse | ErrorOverride
+  ddReport?: DdReportOverride | Record<string, string> // ticker → SSE body map
+  ddChat?: { body: string } | ErrorOverride
+}
+
 export async function setupApiMocks(
   page: Page,
-  overrides?: {
-    assets?: AssetsResponse | ErrorOverride
-    sync?: SyncResponse | ErrorOverride
-    optimize?: OptimizeResponse | ErrorOverride
-  },
+  overrides?: SetupApiMocksOptions,
 ): Promise<void> {
   const o = overrides ?? {}
 
   await page.route('**/api/assets', async (route) => {
     const override = o.assets
     if (isErrorOverride(override)) {
-      await route.fulfill({
-        status: override.status,
-        contentType: 'application/json',
-        body: JSON.stringify(override.body),
-      })
+      await route.fulfill({ status: override.status, contentType: 'application/json', body: JSON.stringify(override.body) })
     } else {
       await route.fulfill({ json: override ?? mockAssets })
+    }
+  })
+
+  await page.route('**/api/search*', async (route) => {
+    const override = o.search
+    if (isErrorOverride(override)) {
+      await route.fulfill({ status: override.status, contentType: 'application/json', body: JSON.stringify(override.body) })
+    } else if (override && !isErrorOverride(override)) {
+      await route.fulfill({ json: override })
+    } else {
+      // Filter mockSearchResults by the q param for realistic behaviour
+      const url = new URL(route.request().url())
+      const q = url.searchParams.get('q') ?? ''
+      const filtered = q
+        ? mockSearchResults.results.filter(
+            (r) =>
+              r.symbol.toLowerCase().includes(q.toLowerCase()) ||
+              r.name.toLowerCase().includes(q.toLowerCase()),
+          )
+        : mockSearchResults.results
+      await route.fulfill({ json: { results: filtered, total: filtered.length } })
     }
   })
 
   await page.route('**/api/sync', async (route) => {
     const override = o.sync
     if (isErrorOverride(override)) {
-      await route.fulfill({
-        status: override.status,
-        contentType: 'application/json',
-        body: JSON.stringify(override.body),
-      })
+      await route.fulfill({ status: override.status, contentType: 'application/json', body: JSON.stringify(override.body) })
     } else {
       await route.fulfill({ json: override ?? mockSyncSuccess })
     }
@@ -107,13 +250,53 @@ export async function setupApiMocks(
   await page.route('**/api/optimize', async (route) => {
     const override = o.optimize
     if (isErrorOverride(override)) {
-      await route.fulfill({
-        status: override.status,
-        contentType: 'application/json',
-        body: JSON.stringify(override.body),
-      })
+      await route.fulfill({ status: override.status, contentType: 'application/json', body: JSON.stringify(override.body) })
     } else {
       await route.fulfill({ json: override ?? mockOptimizeResult })
     }
+  })
+
+  // DD report — per-ticker or global
+  await page.route('**/api/dd/report', async (route) => {
+    const override = o.ddReport
+    if (override && isErrorOverride(override)) {
+      await route.fulfill({ status: override.status, contentType: 'application/json', body: JSON.stringify(override.body) })
+      return
+    }
+    // Determine which ticker was requested
+    let body: string = MOCK_DD_REPORT_AAPL
+    try {
+      const req = JSON.parse(route.request().postData() ?? '{}') as { ticker?: string }
+      const ticker = req.ticker?.toUpperCase() ?? ''
+      if (override && typeof override === 'object' && ticker in override) {
+        body = (override as Record<string, string>)[ticker]
+      } else if (override && 'body' in override && typeof override.body === 'string') {
+        body = override.body
+      } else if (ticker === 'MSFT') {
+        body = MOCK_DD_REPORT_MSFT
+      }
+    } catch {
+      // use default
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body,
+    })
+  })
+
+  // DD chat
+  await page.route('**/api/dd/chat', async (route) => {
+    const override = o.ddChat
+    if (override && isErrorOverride(override)) {
+      await route.fulfill({ status: override.status, contentType: 'application/json', body: JSON.stringify(override.body) })
+      return
+    }
+    const chatBody = override && 'body' in override ? override.body : MOCK_DD_CHAT_RESPONSE
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: chatBody,
+    })
   })
 }
