@@ -1,0 +1,700 @@
+STRUCTURED STOCK DUE DILIGENCE FRAMEWORK
+
+We’ll divide it into 8 categories:
+
+Business Quality
+
+Financial Strength
+
+Profitability
+
+Growth
+
+Valuation
+
+Risk
+
+Competitive Position
+
+Catalysts
+
+1️⃣ BUSINESS QUALITY
+Q1: What does the company actually do?
+
+Where to find:
+
+U.S. Securities and Exchange Commission EDGAR
+https://www.sec.gov/edgar/search/
+
+Search company → Open latest 10-K
+
+Look at:
+
+Item 1 → Business
+
+This is the authoritative description.
+
+Q2: How does the company make money?
+
+Where:
+
+10-K → Item 7 → “Management Discussion & Analysis” (MD&A)
+
+Revenue breakdown section
+
+Segment reporting
+
+Also:
+
+10-K → Note 2: Revenue recognition
+
+Q3: What % revenue comes from each segment?
+
+Where:
+
+10-K → “Segment Information”
+
+Financial statement footnotes
+
+Earnings presentation (Investor Relations website)
+
+2️⃣ FINANCIAL STRENGTH
+Q4: Total Debt?
+
+Where:
+
+10-K → Balance Sheet
+
+Line item: “Total Debt” or “Long-term Debt”
+
+Also:
+Yahoo Finance → Statistics → Balance Sheet
+
+Q5: Cash on hand?
+
+Where:
+
+10-K → Balance Sheet
+
+Line item: “Cash and Cash Equivalents”
+
+Q6: Debt-to-Equity Ratio
+
+Formula:
+
+𝐷
+𝑒
+𝑏
+𝑡
+ 
+𝑡
+𝑜
+ 
+𝐸
+𝑞
+𝑢
+𝑖
+𝑡
+𝑦
+=
+𝑇
+𝑜
+𝑡
+𝑎
+𝑙
+ 
+𝐷
+𝑒
+𝑏
+𝑡
+𝑇
+𝑜
+𝑡
+𝑎
+𝑙
+ 
+𝑆
+ℎ
+𝑎
+𝑟
+𝑒
+ℎ
+𝑜
+𝑙
+𝑑
+𝑒
+𝑟
+ 
+𝐸
+𝑞
+𝑢
+𝑖
+𝑡
+𝑦
+Debt to Equity=
+Total Shareholder Equity
+Total Debt
+	​
+
+
+Where:
+
+Balance Sheet
+
+OR Yahoo Finance → Statistics → Debt/Equity
+
+Q7: Current Ratio
+
+Formula:
+
+𝐶
+𝑢
+𝑟
+𝑟
+𝑒
+𝑛
+𝑡
+ 
+𝑅
+𝑎
+𝑡
+𝑖
+𝑜
+=
+𝐶
+𝑢
+𝑟
+𝑟
+𝑒
+𝑛
+𝑡
+ 
+𝐴
+𝑠
+𝑠
+𝑒
+𝑡
+𝑠
+𝐶
+𝑢
+𝑟
+𝑟
+𝑒
+𝑛
+𝑡
+ 
+𝐿
+𝑖
+𝑎
+𝑏
+𝑖
+𝑙
+𝑖
+𝑡
+𝑖
+𝑒
+𝑠
+Current Ratio=
+Current Liabilities
+Current Assets
+	​
+
+
+Where:
+
+10-K → Balance Sheet
+
+Healthy generally > 1.5
+
+3️⃣ PROFITABILITY
+Q8: Gross Margin
+𝐺
+𝑟
+𝑜
+𝑠
+𝑠
+ 
+𝑀
+𝑎
+𝑟
+𝑔
+𝑖
+𝑛
+=
+𝑅
+𝑒
+𝑣
+𝑒
+𝑛
+𝑢
+𝑒
+−
+𝐶
+𝑂
+𝐺
+𝑆
+𝑅
+𝑒
+𝑣
+𝑒
+𝑛
+𝑢
+𝑒
+Gross Margin=
+Revenue
+Revenue−COGS
+	​
+
+
+Where:
+
+10-K → Income Statement
+
+Yahoo Finance → Statistics → Margins
+
+Q9: Operating Margin
+𝑂
+𝑝
+𝑒
+𝑟
+𝑎
+𝑡
+𝑖
+𝑛
+𝑔
+ 
+𝑀
+𝑎
+𝑟
+𝑔
+𝑖
+𝑛
+=
+𝑂
+𝑝
+𝑒
+𝑟
+𝑎
+𝑡
+𝑖
+𝑛
+𝑔
+ 
+𝐼
+𝑛
+𝑐
+𝑜
+𝑚
+𝑒
+𝑅
+𝑒
+𝑣
+𝑒
+𝑛
+𝑢
+𝑒
+Operating Margin=
+Revenue
+Operating Income
+	​
+
+
+Where:
+
+Income Statement
+
+Q10: Net Margin
+𝑁
+𝑒
+𝑡
+ 
+𝑀
+𝑎
+𝑟
+𝑔
+𝑖
+𝑛
+=
+𝑁
+𝑒
+𝑡
+ 
+𝐼
+𝑛
+𝑐
+𝑜
+𝑚
+𝑒
+𝑅
+𝑒
+𝑣
+𝑒
+𝑛
+𝑢
+𝑒
+Net Margin=
+Revenue
+Net Income
+	​
+
+
+Where:
+
+Income Statement
+
+Yahoo Finance → Statistics
+
+Q11: Return on Equity (ROE)
+𝑅
+𝑂
+𝐸
+=
+𝑁
+𝑒
+𝑡
+ 
+𝐼
+𝑛
+𝑐
+𝑜
+𝑚
+𝑒
+𝑆
+ℎ
+𝑎
+𝑟
+𝑒
+ℎ
+𝑜
+𝑙
+𝑑
+𝑒
+𝑟
+ 
+𝐸
+𝑞
+𝑢
+𝑖
+𝑡
+𝑦
+ROE=
+Shareholder Equity
+Net Income
+	​
+
+
+Where:
+
+Yahoo Finance → Statistics → ROE
+
+OR calculate manually
+
+4️⃣ GROWTH
+Q12: Revenue Growth (5Y CAGR)
+
+Where:
+
+MacroTrends.net
+
+Yahoo Finance → Financials → Annual Revenue
+
+10-K historical table
+
+Download 5 years → calculate CAGR
+
+Q13: EPS Growth (5Y)
+
+Where:
+
+Yahoo Finance → Analysis → Growth Estimates
+
+MacroTrends
+
+Q14: Free Cash Flow Growth
+𝐹
+𝐶
+𝐹
+=
+𝑂
+𝑝
+𝑒
+𝑟
+𝑎
+𝑡
+𝑖
+𝑛
+𝑔
+ 
+𝐶
+𝑎
+𝑠
+ℎ
+ 
+𝐹
+𝑙
+𝑜
+𝑤
+−
+𝐶
+𝑎
+𝑝
+𝐸
+𝑥
+FCF=Operating Cash Flow−CapEx
+
+Where:
+
+10-K → Cash Flow Statement
+
+Yahoo → Cash Flow tab
+
+5️⃣ VALUATION
+Q15: P/E Ratio
+
+Where:
+
+Yahoo Finance → Summary → P/E (TTM)
+
+Q16: Forward P/E
+
+Where:
+
+Yahoo Finance → Summary → Forward P/E
+
+Q17: PEG Ratio
+𝑃
+𝐸
+𝐺
+=
+𝑃
+/
+𝐸
+𝐺
+𝑟
+𝑜
+𝑤
+𝑡
+ℎ
+ 
+𝑅
+𝑎
+𝑡
+𝑒
+PEG=
+Growth Rate
+P/E
+	​
+
+
+Where:
+
+Yahoo Finance → Statistics → PEG
+
+Q18: Price to Free Cash Flow
+𝑃
+/
+𝐹
+𝐶
+𝐹
+=
+𝑀
+𝑎
+𝑟
+𝑘
+𝑒
+𝑡
+ 
+𝐶
+𝑎
+𝑝
+𝐹
+𝑟
+𝑒
+𝑒
+ 
+𝐶
+𝑎
+𝑠
+ℎ
+ 
+𝐹
+𝑙
+𝑜
+𝑤
+P/FCF=
+Free Cash Flow
+Market Cap
+	​
+
+
+Where:
+
+Market cap → Yahoo Finance
+
+FCF → Cash Flow Statement
+
+6️⃣ RISK
+Q19: Beta
+
+Where:
+
+Yahoo Finance → Statistics → Beta
+
+Q20: Historical Max Drawdown
+
+Where:
+
+Portfolio Visualizer
+
+OR:
+Yahoo Finance → Historical Data
+Export CSV → calculate peak-to-trough drop
+
+Q21: Revenue Concentration Risk
+
+Where:
+
+10-K → Major Customers section
+If one customer > 20% revenue → high risk
+
+7️⃣ COMPETITIVE POSITION
+Q22: Who are main competitors?
+
+Where:
+
+10-K → Competition section
+
+Earnings call transcript (Seeking Alpha)
+
+Q23: Market Share?
+
+Where:
+
+Industry reports
+
+Earnings call
+
+Company Investor Day presentation
+
+Q24: Moat Type?
+
+You must evaluate:
+
+Brand
+
+Network effect
+
+Switching cost
+
+Cost advantage
+
+Patents
+
+Source:
+
+10-K
+
+Earnings call
+
+Investor deck
+
+8️⃣ CATALYSTS
+Q25: Next earnings date?
+
+Where:
+
+Yahoo Finance → Summary → Earnings Date
+
+Q26: Upcoming product launches?
+
+Where:
+
+Earnings call transcript
+
+Investor Relations website
+
+Q27: Insider buying?
+
+Where:
+
+SEC EDGAR → Form 4 filings
+
+OpenInsider.com
+
+🧠 ADVANCED (If You Want Institutional-Level Analysis)
+Q28: Stock-based compensation %
+
+Where:
+
+10-K → Stock compensation footnote
+
+Q29: Share dilution?
+
+Where:
+
+10-K → Shares outstanding (past 5 years)
+
+Q30: Free Cash Flow Yield
+𝐹
+𝐶
+𝐹
+ 
+𝑌
+𝑖
+𝑒
+𝑙
+𝑑
+=
+𝐹
+𝐶
+𝐹
+𝑀
+𝑎
+𝑟
+𝑘
+𝑒
+𝑡
+ 
+𝐶
+𝑎
+𝑝
+FCF Yield=
+Market Cap
+FCF
+	​
+
+🔥 If You Want a Clean Scoring Model
+
+You could create:
+
+Category	Weight	Score (1-5)
+Financial Strength	20%	
+Profitability	20%	
+Growth	20%	
+Valuation	15%	
+Risk	10%	
+Competitive Moat	10%	
+Catalysts	5%	
+
+Then compute weighted score.
+
+That turns investing into a structured system.
+
+🚨 The Most Important Question for Stocks
+
+Ask:
+
+If revenue drops 30%, does this company survive?
+
+Check:
+
+Cash
+
+Debt maturity schedule
+
+Operating margin
+
+Interest coverage
+
+All found in:
+10-K → Financial Statements + Notes

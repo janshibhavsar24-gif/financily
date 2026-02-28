@@ -88,3 +88,17 @@ export interface InfeasibilityDetail {
   error: 'infeasible'
   max_achievable: number
 }
+
+export interface DDReportRequest {
+  ticker: string
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface DDChatRequest {
+  ticker: string
+  messages: ChatMessage[]
+}
