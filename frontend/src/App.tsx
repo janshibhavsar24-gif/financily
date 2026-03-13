@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import AssetSelector from './components/AssetSelector'
-import DueDiligencePage from './components/DueDiligencePage'
 import ForecastTable from './components/ForecastTable'
 import MetricsCard from './components/MetricsCard'
 import ParamForm from './components/ParamForm'
@@ -9,8 +8,6 @@ import SyncButton from './components/SyncButton'
 import WeightsBar from './components/WeightsBar'
 import { useOptimize } from './hooks/useOptimize'
 import type { OptimizeRequest } from './types/api'
-
-type ActiveView = 'optimizer' | 'due-diligence'
 
 const DEFAULT_REQUEST: OptimizeRequest = {
   tickers: [],
@@ -23,9 +20,9 @@ const DEFAULT_REQUEST: OptimizeRequest = {
 }
 
 export default function App() {
-  const [activeView, setActiveView] = useState<ActiveView>('optimizer')
   const [selectedTickers, setSelectedTickers] = useState<string[]>([])
   const [params, setParams] = useState<OptimizeRequest>(DEFAULT_REQUEST)
+  const [assetRefreshKey, setAssetRefreshKey] = useState(0)
   const { state, run, reset } = useOptimize()
 
   function handleSubmit() {
@@ -47,39 +44,20 @@ export default function App() {
     }
   }
 
+  function handleSynced() {
+    setAssetRefreshKey((k) => k + 1)
+  }
+
   return (
     <div className="flex flex-col h-screen bg-gray-50 font-sans">
       {/* Top nav bar */}
       <header className="flex-shrink-0 bg-white border-b border-gray-200 flex items-center px-5 h-12 gap-6">
         <span className="text-sm font-bold text-gray-900 mr-2">Financily</span>
-        <button
-          type="button"
-          onClick={() => setActiveView('optimizer')}
-          className={`text-sm font-medium pb-0.5 border-b-2 transition-colors ${
-            activeView === 'optimizer'
-              ? 'border-blue-600 text-blue-700'
-              : 'border-transparent text-gray-500 hover:text-gray-800'
-          }`}
-        >
-          Optimizer
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveView('due-diligence')}
-          className={`text-sm font-medium pb-0.5 border-b-2 transition-colors ${
-            activeView === 'due-diligence'
-              ? 'border-blue-600 text-blue-700'
-              : 'border-transparent text-gray-500 hover:text-gray-800'
-          }`}
-        >
-          Due Diligence
-        </button>
       </header>
 
       {/* Body */}
       <div className="flex flex-1 min-h-0">
-        {activeView === 'optimizer' && (
-          <>
+        <>
             {/* Left panel */}
             <aside className="w-80 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
               <div className="px-5 py-4 border-b border-gray-100">
@@ -91,11 +69,15 @@ export default function App() {
                   <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
                     Assets
                   </h2>
-                  <AssetSelector selected={selectedTickers} onChange={handleTickersChange} />
+                  <AssetSelector
+                    selected={selectedTickers}
+                    onChange={handleTickersChange}
+                    refreshKey={assetRefreshKey}
+                  />
                 </section>
 
                 <section>
-                  <SyncButton tickers={selectedTickers} />
+                  <SyncButton tickers={selectedTickers} onSynced={handleSynced} />
                 </section>
 
                 <section>
@@ -197,10 +179,7 @@ export default function App() {
                 </div>
               )}
             </main>
-          </>
-        )}
-
-        {activeView === 'due-diligence' && <DueDiligencePage />}
+        </>
       </div>
     </div>
   )

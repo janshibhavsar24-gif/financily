@@ -70,10 +70,3 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
             latest_date    DATE
         )
     """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS due_diligence_cache (
-            ticker       VARCHAR PRIMARY KEY,
-            fundamentals VARCHAR,
-            fetched_at   TIMESTAMP
-        )
-    """)
