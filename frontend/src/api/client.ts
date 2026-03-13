@@ -1,12 +1,15 @@
 import type {
   AssetsResponse,
   ChatMessage,
+  MonitorResponse,
   OptimizeRequest,
   OptimizeResponse,
   PortfolioMetrics,
   SearchResponse,
   SyncRequest,
   SyncResponse,
+  WatchlistRequest,
+  WatchlistResponse,
 } from '../types/api'
 
 export class ApiError extends Error {
@@ -78,6 +81,23 @@ export async function getRiskMetrics(
     horizon_years: String(horizonYears),
   })
   return request<PortfolioMetrics>(`/api/risk?${params}`)
+}
+
+export async function getWatchlist(): Promise<WatchlistResponse> {
+  return request<WatchlistResponse>('/api/watchlist')
+}
+
+export async function saveWatchlist(req: WatchlistRequest): Promise<WatchlistResponse> {
+  return request<WatchlistResponse>('/api/watchlist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+}
+
+export async function getMonitorData(tickers: string[]): Promise<MonitorResponse> {
+  const params = new URLSearchParams({ tickers: tickers.join(',') })
+  return request<MonitorResponse>(`/api/monitor?${params}`)
 }
 
 /**

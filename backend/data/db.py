@@ -70,3 +70,9 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
             latest_date    DATE
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS watchlist (
+            ticker    VARCHAR PRIMARY KEY,
+            added_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """)

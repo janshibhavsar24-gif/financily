@@ -102,3 +102,39 @@ export interface DDChatRequest {
   ticker: string
   messages: ChatMessage[]
 }
+
+export interface SparkBar {
+  date: string
+  ret: number
+}
+
+export interface StockMonitor {
+  ticker: string
+  latest_date: string | null
+  price: number | null
+  day_pct: number | null
+  week_pct: number | null
+  month_pct: number | null
+  three_month_pct: number | null
+  ann_volatility: number | null
+  drawdown_from_high: number | null
+  spark: SparkBar[]
+}
+
+export interface CorrelationMatrix {
+  tickers: string[]
+  values: number[][]
+}
+
+export interface MonitorResponse {
+  stocks: StockMonitor[]
+  correlation: CorrelationMatrix | null
+}
+
+export interface WatchlistResponse {
+  tickers: string[]
+}
+
+export interface WatchlistRequest {
+  tickers: string[]
+}

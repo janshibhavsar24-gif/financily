@@ -5,6 +5,7 @@ import type { AssetInfo, SearchResult } from '../types/api'
 interface Props {
   selected: string[]
   onChange: (tickers: string[]) => void
+  refreshKey?: number
 }
 
 function qualityColor(score: number): string {
@@ -19,7 +20,7 @@ function assetTypeLabel(type: string | null): string {
   return map[type.toLowerCase()] ?? type.toUpperCase().slice(0, 4)
 }
 
-export default function AssetSelector({ selected, onChange }: Props) {
+export default function AssetSelector({ selected, onChange, refreshKey = 0 }: Props) {
   const [syncedAssets, setSyncedAssets] = useState<AssetInfo[]>([])
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [query, setQuery] = useState('')
@@ -30,14 +31,14 @@ export default function AssetSelector({ selected, onChange }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Load synced assets on mount (shown when query is empty)
+  // Load synced assets on mount and whenever refreshKey changes
   useEffect(() => {
     listAssets()
       .then((res) => setSyncedAssets(res.assets))
       .catch((err: unknown) => {
         setFetchError(err instanceof Error ? err.message : 'Failed to load assets')
       })
-  }, [])
+  }, [refreshKey])
 
   const runSearch = useCallback(
     (q: string) => {

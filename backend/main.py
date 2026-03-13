@@ -13,6 +13,7 @@ from backend.api.assets import router as assets_router
 from backend.api.optimize import router as optimize_router
 from backend.api.risk import router as risk_router
 from backend.api.search import router as search_router
+from backend.api.monitor import router as monitor_router
 
 
 @asynccontextmanager
@@ -64,6 +65,7 @@ app.include_router(assets_router)
 app.include_router(optimize_router)
 app.include_router(risk_router)
 app.include_router(search_router)
+app.include_router(monitor_router)
 
 # Static file serving — MUST be registered last
 FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"

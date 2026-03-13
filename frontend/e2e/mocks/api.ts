@@ -1,9 +1,11 @@
 import type { Page } from '@playwright/test'
 import type {
   AssetsResponse,
+  MonitorResponse,
   OptimizeResponse,
   SearchResponse,
   SyncResponse,
+  WatchlistResponse,
 } from '../../src/types/api'
 
 // ---------------------------------------------------------------------------
@@ -132,6 +134,53 @@ export const mockOptimizeResult: OptimizeResponse = {
   warnings: [],
 }
 
+export const mockWatchlist: WatchlistResponse = {
+  tickers: ['SPY', 'AAPL'],
+}
+
+function makeSpark(n = 30): Array<{ date: string; ret: number }> {
+  return Array.from({ length: n }, (_, i) => ({
+    date: `2026-01-${String(i + 1).padStart(2, '0')}`,
+    ret: (Math.random() - 0.48) * 0.02,
+  }))
+}
+
+export const mockMonitorResponse: MonitorResponse = {
+  stocks: [
+    {
+      ticker: 'SPY',
+      latest_date: '2026-02-19',
+      price: 512.34,
+      day_pct: 0.0123,
+      week_pct: 0.0215,
+      month_pct: 0.038,
+      three_month_pct: 0.072,
+      ann_volatility: 0.162,
+      drawdown_from_high: -0.034,
+      spark: makeSpark(),
+    },
+    {
+      ticker: 'AAPL',
+      latest_date: '2026-02-19',
+      price: 198.76,
+      day_pct: -0.0087,
+      week_pct: -0.0145,
+      month_pct: 0.021,
+      three_month_pct: 0.041,
+      ann_volatility: 0.198,
+      drawdown_from_high: -0.078,
+      spark: makeSpark(),
+    },
+  ],
+  correlation: {
+    tickers: ['SPY', 'AAPL'],
+    values: [
+      [1.0, 0.72],
+      [0.72, 1.0],
+    ],
+  },
+}
+
 // ---------------------------------------------------------------------------
 // SSE helpers
 // ---------------------------------------------------------------------------
@@ -200,6 +249,8 @@ export interface SetupApiMocksOptions {
   search?: SearchResponse | ErrorOverride
   ddReport?: DdReportOverride | Record<string, string> // ticker → SSE body map
   ddChat?: { body: string } | ErrorOverride
+  watchlist?: WatchlistResponse | ErrorOverride
+  monitor?: MonitorResponse | ErrorOverride
 }
 
 export async function setupApiMocks(
@@ -283,6 +334,37 @@ export async function setupApiMocks(
       contentType: 'text/event-stream',
       body,
     })
+  })
+
+  await page.route('**/api/watchlist', async (route) => {
+    const method = route.request().method()
+    const override = o.watchlist
+    if (isErrorOverride(override)) {
+      await route.fulfill({ status: override.status, contentType: 'application/json', body: JSON.stringify(override.body) })
+      return
+    }
+    if (method === 'POST') {
+      // Echo back the tickers that were saved
+      let body: WatchlistResponse = override ?? { tickers: [] }
+      try {
+        const req = JSON.parse(route.request().postData() ?? '{}') as { tickers?: string[] }
+        body = { tickers: req.tickers ?? [] }
+      } catch {
+        // use default
+      }
+      await route.fulfill({ json: body })
+    } else {
+      await route.fulfill({ json: override ?? { tickers: [] } })
+    }
+  })
+
+  await page.route('**/api/monitor*', async (route) => {
+    const override = o.monitor
+    if (isErrorOverride(override)) {
+      await route.fulfill({ status: override.status, contentType: 'application/json', body: JSON.stringify(override.body) })
+    } else {
+      await route.fulfill({ json: override ?? mockMonitorResponse })
+    }
   })
 
   // DD chat

@@ -2,12 +2,15 @@ import { useState } from 'react'
 import AssetSelector from './components/AssetSelector'
 import ForecastTable from './components/ForecastTable'
 import MetricsCard from './components/MetricsCard'
+import MonitorPage from './components/MonitorPage'
 import ParamForm from './components/ParamForm'
 import RiskCostTable from './components/RiskCostTable'
 import SyncButton from './components/SyncButton'
 import WeightsBar from './components/WeightsBar'
 import { useOptimize } from './hooks/useOptimize'
 import type { OptimizeRequest } from './types/api'
+
+type ActiveView = 'optimizer' | 'monitor'
 
 const DEFAULT_REQUEST: OptimizeRequest = {
   tickers: [],
@@ -20,6 +23,7 @@ const DEFAULT_REQUEST: OptimizeRequest = {
 }
 
 export default function App() {
+  const [activeView, setActiveView] = useState<ActiveView>('optimizer')
   const [selectedTickers, setSelectedTickers] = useState<string[]>([])
   const [params, setParams] = useState<OptimizeRequest>(DEFAULT_REQUEST)
   const [assetRefreshKey, setAssetRefreshKey] = useState(0)
@@ -53,10 +57,39 @@ export default function App() {
       {/* Top nav bar */}
       <header className="flex-shrink-0 bg-white border-b border-gray-200 flex items-center px-5 h-12 gap-6">
         <span className="text-sm font-bold text-gray-900 mr-2">Financily</span>
+        <nav className="flex items-center gap-1">
+          <button
+            type="button"
+            data-testid="nav-optimizer"
+            onClick={() => setActiveView('optimizer')}
+            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+              activeView === 'optimizer'
+                ? 'bg-blue-100 text-blue-700'
+                : 'text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            Optimizer
+          </button>
+          <button
+            type="button"
+            data-testid="nav-monitor"
+            onClick={() => setActiveView('monitor')}
+            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+              activeView === 'monitor'
+                ? 'bg-blue-100 text-blue-700'
+                : 'text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            Monitor
+          </button>
+        </nav>
       </header>
 
       {/* Body */}
       <div className="flex flex-1 min-h-0">
+        {activeView === 'monitor' ? (
+          <MonitorPage />
+        ) : (
         <>
             {/* Left panel */}
             <aside className="w-80 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
@@ -180,6 +213,7 @@ export default function App() {
               )}
             </main>
         </>
+        )}
       </div>
     </div>
   )
