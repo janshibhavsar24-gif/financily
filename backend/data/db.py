@@ -76,3 +76,20 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
             added_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS watchlists (
+            id         VARCHAR PRIMARY KEY,
+            name       VARCHAR NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS watchlist_holdings (
+            id           VARCHAR PRIMARY KEY,
+            watchlist_id VARCHAR NOT NULL,
+            ticker       VARCHAR NOT NULL,
+            amount       DOUBLE  NOT NULL,
+            purchase_date DATE   NOT NULL,
+            added_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """)

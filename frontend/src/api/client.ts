@@ -1,13 +1,21 @@
 import type {
+  AddLotRequest,
   AssetsResponse,
   ChatMessage,
+  CreateWatchlistRequest,
+  HoldingsResponse,
+  LotInfo,
   MonitorResponse,
   OptimizeRequest,
   OptimizeResponse,
   PortfolioMetrics,
+  PortfolioResponse,
+  RenameWatchlistRequest,
   SearchResponse,
   SyncRequest,
   SyncResponse,
+  WatchlistInfo,
+  WatchlistListResponse,
   WatchlistRequest,
   WatchlistResponse,
 } from '../types/api'
@@ -98,6 +106,54 @@ export async function saveWatchlist(req: WatchlistRequest): Promise<WatchlistRes
 export async function getMonitorData(tickers: string[]): Promise<MonitorResponse> {
   const params = new URLSearchParams({ tickers: tickers.join(',') })
   return request<MonitorResponse>(`/api/monitor?${params}`)
+}
+
+// Named watchlists + portfolio P&L
+export async function listWatchlists(): Promise<WatchlistListResponse> {
+  return request<WatchlistListResponse>('/api/watchlists')
+}
+
+export async function createWatchlist(req: CreateWatchlistRequest): Promise<WatchlistInfo> {
+  return request<WatchlistInfo>('/api/watchlists', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+}
+
+export async function renameWatchlist(
+  id: string,
+  req: RenameWatchlistRequest,
+): Promise<WatchlistInfo> {
+  return request<WatchlistInfo>(`/api/watchlists/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+}
+
+export async function deleteWatchlist(id: string): Promise<void> {
+  await fetch(`/api/watchlists/${id}`, { method: 'DELETE' })
+}
+
+export async function getHoldings(watchlistId: string): Promise<HoldingsResponse> {
+  return request<HoldingsResponse>(`/api/watchlists/${watchlistId}/holdings`)
+}
+
+export async function addLot(watchlistId: string, req: AddLotRequest): Promise<LotInfo> {
+  return request<LotInfo>(`/api/watchlists/${watchlistId}/holdings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+}
+
+export async function deleteLot(watchlistId: string, lotId: string): Promise<void> {
+  await fetch(`/api/watchlists/${watchlistId}/holdings/${lotId}`, { method: 'DELETE' })
+}
+
+export async function getPortfolio(watchlistId: string): Promise<PortfolioResponse> {
+  return request<PortfolioResponse>(`/api/watchlists/${watchlistId}/portfolio`)
 }
 
 /**

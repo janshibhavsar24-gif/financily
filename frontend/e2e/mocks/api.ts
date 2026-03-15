@@ -1,10 +1,14 @@
 import type { Page } from '@playwright/test'
 import type {
   AssetsResponse,
+  LotInfo,
   MonitorResponse,
   OptimizeResponse,
+  PortfolioResponse,
   SearchResponse,
   SyncResponse,
+  WatchlistInfo,
+  WatchlistListResponse,
   WatchlistResponse,
 } from '../../src/types/api'
 
@@ -182,6 +186,95 @@ export const mockMonitorResponse: MonitorResponse = {
 }
 
 // ---------------------------------------------------------------------------
+// Named watchlist + portfolio mock data
+// ---------------------------------------------------------------------------
+
+export const mockWatchlistList: WatchlistListResponse = {
+  watchlists: [
+    { id: 'wl-1', name: 'My Portfolio', holding_count: 3, created_at: '2024-01-01T00:00:00' },
+    { id: 'wl-2', name: 'Tech Picks', holding_count: 1, created_at: '2024-01-02T00:00:00' },
+  ],
+}
+
+export const mockHoldings: LotInfo[] = [
+  { lot_id: 'lot-1', ticker: 'SPY', amount: 5000, purchase_date: '2023-11-01', added_at: '2024-01-01T00:00:00' },
+  { lot_id: 'lot-2', ticker: 'AAPL', amount: 1000, purchase_date: '2024-01-15', added_at: '2024-01-01T01:00:00' },
+  { lot_id: 'lot-3', ticker: 'AAPL', amount: 500, purchase_date: '2024-06-01', added_at: '2024-06-01T00:00:00' },
+]
+
+export const mockPortfolio: PortfolioResponse = {
+  watchlist_id: 'wl-1',
+  watchlist_name: 'My Portfolio',
+  summary: {
+    total_invested: 6500,
+    total_current_value: 7520,
+    total_pl_dollars: 1020,
+    total_pl_pct: 0.1569,
+    spy_equivalent_value: 7551,
+    spy_return_pct: 0.1617,
+    as_of_date: '2026-02-19',
+  },
+  holdings: [
+    {
+      ticker: 'SPY',
+      lots: [
+        {
+          lot_id: 'lot-1',
+          ticker: 'SPY',
+          amount: 5000,
+          purchase_date: '2023-11-01',
+          purchase_price: 430.0,
+          current_price: 512.34,
+          current_value: 5900,
+          pl_dollars: 900,
+          pl_pct: 0.18,
+          days_held: 840,
+        },
+      ],
+      total_amount: 5000,
+      total_current_value: 5900,
+      total_pl_dollars: 900,
+      avg_pl_pct: 0.18,
+      allocation_pct: 0.785,
+    },
+    {
+      ticker: 'AAPL',
+      lots: [
+        {
+          lot_id: 'lot-2',
+          ticker: 'AAPL',
+          amount: 1000,
+          purchase_date: '2024-01-15',
+          purchase_price: 185.0,
+          current_price: 198.76,
+          current_value: 1100,
+          pl_dollars: 100,
+          pl_pct: 0.1,
+          days_held: 395,
+        },
+        {
+          lot_id: 'lot-3',
+          ticker: 'AAPL',
+          amount: 500,
+          purchase_date: '2024-06-01',
+          purchase_price: 192.0,
+          current_price: 198.76,
+          current_value: 520,
+          pl_dollars: 20,
+          pl_pct: 0.04,
+          days_held: 258,
+        },
+      ],
+      total_amount: 1500,
+      total_current_value: 1620,
+      total_pl_dollars: 120,
+      avg_pl_pct: 0.08,
+      allocation_pct: 0.215,
+    },
+  ],
+}
+
+// ---------------------------------------------------------------------------
 // SSE helpers
 // ---------------------------------------------------------------------------
 
@@ -251,6 +344,9 @@ export interface SetupApiMocksOptions {
   ddChat?: { body: string } | ErrorOverride
   watchlist?: WatchlistResponse | ErrorOverride
   monitor?: MonitorResponse | ErrorOverride
+  // Named watchlists
+  watchlists?: WatchlistListResponse | ErrorOverride
+  portfolio?: PortfolioResponse | ErrorOverride
 }
 
 export async function setupApiMocks(
@@ -380,5 +476,112 @@ export async function setupApiMocks(
       contentType: 'text/event-stream',
       body: chatBody,
     })
+  })
+
+  // Named watchlists list + create
+  await page.route('**/api/watchlists', async (route) => {
+    const method = route.request().method()
+    const override = o.watchlists
+    if (isErrorOverride(override)) {
+      await route.fulfill({ status: override.status, contentType: 'application/json', body: JSON.stringify(override.body) })
+      return
+    }
+    if (method === 'POST') {
+      // Create a new watchlist — echo back a new WatchlistInfo
+      let name = 'New Watchlist'
+      try {
+        const req = JSON.parse(route.request().postData() ?? '{}') as { name?: string }
+        name = req.name ?? name
+      } catch { /* ignore */ }
+      const newWl: WatchlistInfo = {
+        id: `wl-new-${Date.now()}`,
+        name,
+        holding_count: 0,
+        created_at: new Date().toISOString(),
+      }
+      await route.fulfill({ status: 201, json: newWl })
+    } else {
+      await route.fulfill({ json: override ?? mockWatchlistList })
+    }
+  })
+
+  // Watchlist by ID — rename / delete
+  await page.route('**/api/watchlists/*', async (route) => {
+    const url = route.request().url()
+    const method = route.request().method()
+
+    // Skip sub-resource routes (holdings, portfolio) — handled separately
+    if (url.includes('/holdings') || url.includes('/portfolio')) {
+      await route.continue()
+      return
+    }
+
+    if (method === 'PATCH') {
+      // Rename — return updated WatchlistInfo
+      const segments = url.split('/')
+      const id = segments[segments.length - 1]
+      let name = 'Renamed'
+      try {
+        const req = JSON.parse(route.request().postData() ?? '{}') as { name?: string }
+        name = req.name ?? name
+      } catch { /* ignore */ }
+      // Find in mockWatchlistList or use generic
+      const existing = mockWatchlistList.watchlists.find((w) => w.id === id)
+      const updated: WatchlistInfo = { ...(existing ?? { id, holding_count: 0, created_at: '' }), name }
+      await route.fulfill({ json: updated })
+    } else if (method === 'DELETE') {
+      await route.fulfill({ status: 204, body: '' })
+    } else {
+      // GET single watchlist — not used by frontend but handle gracefully
+      await route.fulfill({ status: 404, json: { detail: 'Not found' } })
+    }
+  })
+
+  // Holdings — GET list / POST add lot: /api/watchlists/:id/holdings
+  await page.route('**/api/watchlists/*/holdings', async (route) => {
+    const method = route.request().method()
+    if (method === 'POST') {
+      let ticker = 'UNKNOWN'
+      let amount = 0
+      let purchase_date = '2024-01-01'
+      try {
+        const req = JSON.parse(route.request().postData() ?? '{}') as { ticker?: string; amount?: number; purchase_date?: string }
+        ticker = req.ticker?.toUpperCase() ?? ticker
+        amount = req.amount ?? amount
+        purchase_date = req.purchase_date ?? purchase_date
+      } catch { /* ignore */ }
+      const newLot: LotInfo = {
+        lot_id: `lot-new-${Date.now()}`,
+        ticker,
+        amount,
+        purchase_date,
+        added_at: new Date().toISOString(),
+      }
+      await route.fulfill({ status: 201, json: newLot })
+    } else {
+      await route.fulfill({
+        json: {
+          watchlist_id: 'wl-1',
+          watchlist_name: 'My Portfolio',
+          holdings: mockHoldings,
+        },
+      })
+    }
+  })
+
+  // Delete specific lot: DELETE /api/watchlists/:id/holdings/:lotId
+  // Added last so it has higher priority than the holdings base route
+  await page.route('**/api/watchlists/*/holdings/*', async (route) => {
+    await route.fulfill({ status: 204, body: '' })
+  })
+
+  // Portfolio P&L — added last so it overrides watchlist/* if glob is greedy
+  await page.route('**/api/watchlists/*/portfolio', async (route) => {
+    const override = o.portfolio
+    if (isErrorOverride(override)) {
+      await route.fulfill({ status: override.status, contentType: 'application/json', body: JSON.stringify(override.body) })
+      return
+    }
+    await route.fulfill({ json: override ?? mockPortfolio })
   })
 }

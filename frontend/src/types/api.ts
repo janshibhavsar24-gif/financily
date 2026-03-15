@@ -138,3 +138,83 @@ export interface WatchlistResponse {
 export interface WatchlistRequest {
   tickers: string[]
 }
+
+// Named watchlists + portfolio P&L
+export interface WatchlistInfo {
+  id: string
+  name: string
+  holding_count: number
+  created_at: string
+}
+
+export interface WatchlistListResponse {
+  watchlists: WatchlistInfo[]
+}
+
+export interface CreateWatchlistRequest {
+  name: string
+}
+
+export interface RenameWatchlistRequest {
+  name: string
+}
+
+export interface LotInfo {
+  lot_id: string
+  ticker: string
+  amount: number
+  purchase_date: string
+  added_at: string
+}
+
+export interface HoldingsResponse {
+  watchlist_id: string
+  watchlist_name: string
+  holdings: LotInfo[]
+}
+
+export interface AddLotRequest {
+  ticker: string
+  amount: number
+  purchase_date: string
+}
+
+export interface LotPL {
+  lot_id: string
+  ticker: string
+  amount: number
+  purchase_date: string
+  purchase_price: number | null
+  current_price: number | null
+  current_value: number | null
+  pl_dollars: number | null
+  pl_pct: number | null
+  days_held: number | null
+}
+
+export interface TickerPL {
+  ticker: string
+  lots: LotPL[]
+  total_amount: number
+  total_current_value: number | null
+  total_pl_dollars: number | null
+  avg_pl_pct: number | null
+  allocation_pct: number | null
+}
+
+export interface PortfolioSummaryPL {
+  total_invested: number
+  total_current_value: number | null
+  total_pl_dollars: number | null
+  total_pl_pct: number | null
+  spy_equivalent_value: number | null
+  spy_return_pct: number | null
+  as_of_date: string | null
+}
+
+export interface PortfolioResponse {
+  watchlist_id: string
+  watchlist_name: string
+  summary: PortfolioSummaryPL
+  holdings: TickerPL[]
+}
