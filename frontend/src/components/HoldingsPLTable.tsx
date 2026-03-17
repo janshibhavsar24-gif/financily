@@ -5,7 +5,7 @@ interface Props {
   holdings: TickerPL[]
 }
 
-type SortKey = 'ticker' | 'lots' | 'invested' | 'current_value' | 'pl_dollars' | 'pl_pct' | 'allocation'
+type SortKey = 'ticker' | 'lots' | 'invested' | 'current_value' | 'pl_dollars' | 'pl_pct' | 'allocation' | 'beta' | 'alpha'
 type SortDir = 'asc' | 'desc'
 
 function fmt$(v: number | null): string {
@@ -104,6 +104,14 @@ export default function HoldingsPLTable({ holdings }: Props) {
         va = a.allocation_pct
         vb = b.allocation_pct
         break
+      case 'beta':
+        va = a.beta
+        vb = b.beta
+        break
+      case 'alpha':
+        va = a.alpha_pct
+        vb = b.alpha_pct
+        break
     }
     if (va === null && vb === null) return 0
     if (va === null) return 1
@@ -130,6 +138,8 @@ export default function HoldingsPLTable({ holdings }: Props) {
             <SortHeader label="P&L $" col="pl_dollars" current={sortKey} dir={sortDir} onClick={handleSort} />
             <SortHeader label="P&L %" col="pl_pct" current={sortKey} dir={sortDir} onClick={handleSort} />
             <SortHeader label="Alloc %" col="allocation" current={sortKey} dir={sortDir} onClick={handleSort} />
+            <SortHeader label="β" col="beta" current={sortKey} dir={sortDir} onClick={handleSort} />
+            <SortHeader label="α vs SPY" col="alpha" current={sortKey} dir={sortDir} onClick={handleSort} />
           </tr>
         </thead>
         <tbody>
@@ -170,6 +180,16 @@ export default function HoldingsPLTable({ holdings }: Props) {
                   {h.allocation_pct !== null
                     ? `${(h.allocation_pct * 100).toFixed(1)}%`
                     : '—'}
+                </span>
+              </td>
+              <td className="px-3 py-2 text-gray-500">
+                <span data-testid={`holdings-beta-${h.ticker}`}>
+                  {h.beta !== null ? h.beta.toFixed(2) : '—'}
+                </span>
+              </td>
+              <td className={`px-3 py-2 ${plColor(h.alpha_pct)}`}>
+                <span data-testid={`holdings-alpha-${h.ticker}`}>
+                  {fmtPct(h.alpha_pct)}
                 </span>
               </td>
             </tr>

@@ -93,3 +93,25 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
             added_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    # F3 — stop-loss column (safe to run on existing DB)
+    conn.execute("""
+        ALTER TABLE watchlist_holdings
+        ADD COLUMN IF NOT EXISTS stop_loss_pct DOUBLE DEFAULT NULL
+    """)
+    # F2 — theme tags (global per-ticker, user-assignable)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS ticker_tags (
+            ticker  VARCHAR PRIMARY KEY,
+            theme   VARCHAR NOT NULL
+        )
+    """)
+    # F6 — earnings calendar (manual entry)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS earnings_dates (
+            ticker        VARCHAR NOT NULL,
+            earnings_date DATE    NOT NULL,
+            note          VARCHAR NOT NULL DEFAULT '',
+            created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (ticker, earnings_date)
+        )
+    """)

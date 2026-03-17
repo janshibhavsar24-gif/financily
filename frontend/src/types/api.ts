@@ -165,6 +165,7 @@ export interface LotInfo {
   amount: number
   purchase_date: string
   added_at: string
+  stop_loss_pct: number | null
 }
 
 export interface HoldingsResponse {
@@ -179,6 +180,13 @@ export interface AddLotRequest {
   purchase_date: string
 }
 
+export interface UpdateLotRequest {
+  ticker: string
+  amount: number
+  purchase_date: string
+  stop_loss_pct?: number | null
+}
+
 export interface LotPL {
   lot_id: string
   ticker: string
@@ -190,6 +198,7 @@ export interface LotPL {
   pl_dollars: number | null
   pl_pct: number | null
   days_held: number | null
+  stop_loss_pct: number | null
 }
 
 export interface TickerPL {
@@ -200,6 +209,9 @@ export interface TickerPL {
   total_pl_dollars: number | null
   avg_pl_pct: number | null
   allocation_pct: number | null
+  beta: number | null
+  spy_return_pct: number | null
+  alpha_pct: number | null
 }
 
 export interface PortfolioSummaryPL {
@@ -210,6 +222,33 @@ export interface PortfolioSummaryPL {
   spy_equivalent_value: number | null
   spy_return_pct: number | null
   as_of_date: string | null
+  portfolio_beta: number | null
+  alpha_pct: number | null
+}
+
+// Analytics — theme tags (F2) and earnings (F6)
+export interface ThemeTagsResponse {
+  tags: Record<string, string>
+}
+
+export interface ThemeTagRequest {
+  theme: string
+}
+
+export interface EarningsDate {
+  ticker: string
+  earnings_date: string
+  note: string
+}
+
+export interface EarningsDateRequest {
+  ticker: string
+  earnings_date: string
+  note: string
+}
+
+export interface EarningsResponse {
+  entries: EarningsDate[]
 }
 
 export interface PortfolioResponse {

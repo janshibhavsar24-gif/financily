@@ -1,23 +1,31 @@
 import { useCallback, useEffect, useState } from 'react'
-import { addLot, deleteLot } from '../api/client'
+import { addLot, deleteLot, updateLot } from '../api/client'
+import { useEarnings } from '../hooks/useEarnings'
 import { useMonitor } from '../hooks/useMonitor'
 import { usePortfolio } from '../hooks/usePortfolio'
+import { useThemeTags } from '../hooks/useThemeTags'
 import { useWatchlists } from '../hooks/useWatchlists'
-import type { LotPL } from '../types/api'
+import type { EarningsDateRequest, LotPL, UpdateLotRequest } from '../types/api'
 import AllocationBars from './AllocationBars'
 import CorrelationMatrix from './CorrelationMatrix'
-import DrawdownMeter from './DrawdownMeter'
+import EarningsCalendar from './EarningsCalendar'
 import HeatMap from './HeatMap'
 import HoldingsPLTable from './HoldingsPLTable'
 import PerformanceCallouts from './PerformanceCallouts'
 import PortfolioSummary from './PortfolioSummary'
+import PositionHealthTable from './PositionHealthTable'
 import PulseTable from './PulseTable'
 import SparklineBar from './SparklineBar'
+import ThematicClusters from './ThematicClusters'
+
+const THEME_OPTIONS = ['AI Infrastructure', 'Energy Transition', 'Diversifiers']
 
 export default function MonitorPage() {
   const { state: wlState, loadAll: loadWatchlists, create: createWl, rename: renameWl, remove: removeWl, select: selectWl } = useWatchlists()
   const { state: portfolioState, fetch: fetchPortfolio, reset: resetPortfolio } = usePortfolio()
   const { state: monitorState, fetch: fetchMonitor, reset: resetMonitor } = useMonitor()
+  const { state: tagsState, load: loadTags, setTag, removeTag } = useThemeTags()
+  const { state: earningsState, load: loadEarnings, add: addEarning, remove: removeEarning } = useEarnings()
 
   // Lot management
   const [newLotTicker, setNewLotTicker] = useState('')
@@ -37,9 +45,16 @@ export default function MonitorPage() {
   const [creatingWl, setCreatingWl] = useState(false)
   const [createWlError, setCreateWlError] = useState<string | null>(null)
 
+  // Earnings form
+  const [showEarningsForm, setShowEarningsForm] = useState(false)
+  const [earningTicker, setEarningTicker] = useState('')
+  const [earningDate, setEarningDate] = useState('')
+  const [earningNote, setEarningNote] = useState('')
+  const [addingEarning, setAddingEarning] = useState(false)
+
   const selectedId = wlState.selectedId
 
-  // Refresh portfolio when selected watchlist changes
+  // Refresh portfolio + tags + earnings when selected watchlist changes
   useEffect(() => {
     if (!selectedId) {
       resetPortfolio()
@@ -47,7 +62,9 @@ export default function MonitorPage() {
       return
     }
     void fetchPortfolio(selectedId)
-  }, [selectedId, fetchPortfolio, resetPortfolio, resetMonitor])
+    void loadTags()
+    void loadEarnings()
+  }, [selectedId, fetchPortfolio, resetPortfolio, resetMonitor, loadTags, loadEarnings])
 
   // Refresh market data when portfolio loads
   useEffect(() => {
@@ -106,6 +123,15 @@ export default function MonitorPage() {
     [selectedId, fetchPortfolio, loadWatchlists],
   )
 
+  const handleUpdateLot = useCallback(
+    async (lotId: string, data: UpdateLotRequest) => {
+      if (!selectedId) return
+      await updateLot(selectedId, lotId, data)
+      await Promise.all([fetchPortfolio(selectedId), loadWatchlists()])
+    },
+    [selectedId, fetchPortfolio, loadWatchlists],
+  )
+
   async function handleCreateWatchlist() {
     if (!newWlName.trim()) return
     setCreatingWl(true)
@@ -144,10 +170,32 @@ export default function MonitorPage() {
     }
   }
 
+  async function handleAddEarning() {
+    if (!earningTicker.trim() || !earningDate) return
+    setAddingEarning(true)
+    try {
+      const req: EarningsDateRequest = {
+        ticker: earningTicker.trim().toUpperCase(),
+        earnings_date: earningDate,
+        note: earningNote.trim(),
+      }
+      await addEarning(req)
+      setEarningTicker('')
+      setEarningDate('')
+      setEarningNote('')
+      setShowEarningsForm(false)
+    } catch {
+      // non-critical
+    } finally {
+      setAddingEarning(false)
+    }
+  }
+
   const portfolio = portfolioState.result
   const holdings = portfolio?.holdings ?? []
   const stocks = monitorState.result?.stocks ?? []
   const stocksWithData = stocks.filter((s) => s.latest_date !== null)
+  const portfolioTickers = holdings.map((h) => h.ticker)
 
   return (
     <div className="flex flex-1 min-h-0">
@@ -307,7 +355,7 @@ export default function MonitorPage() {
           {/* Selected watchlist details */}
           {selectedId && (
             <section className="space-y-4">
-              {/* Holdings list */}
+              {/* Holdings list with theme dropdown */}
               {holdings.length > 0 && (
                 <div>
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
@@ -316,14 +364,33 @@ export default function MonitorPage() {
                   <div className="space-y-3">
                     {holdings.map((h) => (
                       <div key={h.ticker}>
-                        <p className="text-xs font-semibold text-gray-700 font-mono mb-1">
-                          {h.ticker}
-                        </p>
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-xs font-semibold text-gray-700 font-mono flex-1">
+                            {h.ticker}
+                          </p>
+                          {/* F2 — theme tag dropdown */}
+                          <select
+                            value={tagsState.tags[h.ticker] ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              if (val) void setTag(h.ticker, val)
+                              else void removeTag(h.ticker)
+                            }}
+                            className="text-xs border border-gray-200 rounded px-1 py-0.5 text-gray-500 bg-white"
+                            aria-label={`Theme for ${h.ticker}`}
+                          >
+                            <option value="">Untagged</option>
+                            {THEME_OPTIONS.map((t) => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </select>
+                        </div>
                         {h.lots.map((lot) => (
                           <LotRow
                             key={lot.lot_id}
                             lot={lot}
                             onDelete={handleDeleteLot}
+                            onUpdate={handleUpdateLot}
                           />
                         ))}
                       </div>
@@ -378,6 +445,90 @@ export default function MonitorPage() {
                   >
                     {addingLot ? 'Adding…' : 'Add Lot'}
                   </button>
+                </div>
+              </div>
+
+              {/* F6 — Earnings Dates */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    Earnings Dates
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowEarningsForm((v) => !v)}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    + Add
+                  </button>
+                </div>
+
+                {showEarningsForm && (
+                  <div className="space-y-1.5 mb-2">
+                    <input
+                      type="text"
+                      aria-label="Earnings ticker"
+                      value={earningTicker}
+                      onChange={(e) => setEarningTicker(e.target.value.toUpperCase())}
+                      placeholder="Ticker"
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <input
+                      type="date"
+                      aria-label="Earnings date"
+                      value={earningDate}
+                      onChange={(e) => setEarningDate(e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <input
+                      type="text"
+                      aria-label="Note (optional)"
+                      value={earningNote}
+                      onChange={(e) => setEarningNote(e.target.value)}
+                      placeholder="Note (optional)"
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => void handleAddEarning()}
+                        disabled={addingEarning || !earningTicker.trim() || !earningDate}
+                        className="flex-1 px-2 py-1 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {addingEarning ? 'Adding…' : 'Add'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowEarningsForm(false); setEarningTicker(''); setEarningDate(''); setEarningNote('') }}
+                        className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Existing earnings entries for portfolio tickers */}
+                <div className="space-y-0.5">
+                  {earningsState.entries
+                    .filter((e) => portfolioTickers.includes(e.ticker))
+                    .map((e) => (
+                      <div
+                        key={`${e.ticker}-${e.earnings_date}`}
+                        className="flex items-center justify-between text-xs py-0.5"
+                      >
+                        <span className="text-gray-600 font-mono">{e.ticker}</span>
+                        <span className="text-gray-500">{e.earnings_date}</span>
+                        <button
+                          type="button"
+                          onClick={() => void removeEarning(e.ticker, e.earnings_date)}
+                          className="text-gray-300 hover:text-red-500 ml-1"
+                          aria-label={`Remove earnings ${e.ticker} ${e.earnings_date}`}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
                 </div>
               </div>
 
@@ -480,6 +631,14 @@ export default function MonitorPage() {
               <PortfolioSummary summary={portfolio.summary} />
             </section>
 
+            {/* F2 — Thematic Clusters (shown when at least one ticker is tagged) */}
+            {holdings.length > 0 && Object.keys(tagsState.tags).length > 0 && (
+              <section>
+                <h2 className="text-base font-bold text-gray-800 mb-3">Thematic Clusters</h2>
+                <ThematicClusters holdings={holdings} themeTags={tagsState.tags} />
+              </section>
+            )}
+
             {/* Performance Callouts */}
             {holdings.some((h) => h.avg_pl_pct !== null) && (
               <section>
@@ -502,6 +661,17 @@ export default function MonitorPage() {
               <HoldingsPLTable holdings={holdings} />
             </section>
 
+            {/* F6 — Earnings Calendar */}
+            {earningsState.entries.length > 0 && (
+              <section>
+                <h2 className="text-base font-bold text-gray-800 mb-3">Upcoming Earnings</h2>
+                <EarningsCalendar
+                  entries={earningsState.entries}
+                  portfolioTickers={portfolioTickers}
+                />
+              </section>
+            )}
+
             {/* Market Data divider */}
             {stocksWithData.length > 0 && (
               <>
@@ -510,6 +680,14 @@ export default function MonitorPage() {
                     Market Data
                   </p>
                 </div>
+
+                {/* F8 — Position Health Table */}
+                {holdings.length > 0 && (
+                  <section>
+                    <h2 className="text-base font-bold text-gray-800 mb-3">Position Health</h2>
+                    <PositionHealthTable holdings={holdings} stocks={stocksWithData} />
+                  </section>
+                )}
 
                 {/* Daily Heat Map */}
                 <section>
@@ -521,14 +699,6 @@ export default function MonitorPage() {
                 <section>
                   <h2 className="text-base font-bold text-gray-800 mb-3">Pulse Table</h2>
                   <PulseTable stocks={stocksWithData} />
-                </section>
-
-                {/* Drawdown Meter */}
-                <section>
-                  <h2 className="text-base font-bold text-gray-800 mb-3">
-                    Drawdown from 52W High
-                  </h2>
-                  <DrawdownMeter stocks={stocksWithData} />
                 </section>
 
                 {/* 30-Day Sparklines */}
@@ -573,10 +743,25 @@ export default function MonitorPage() {
 interface LotRowProps {
   lot: LotPL
   onDelete: (lotId: string) => Promise<void>
+  onUpdate: (lotId: string, data: UpdateLotRequest) => Promise<void>
 }
 
-function LotRow({ lot, onDelete }: LotRowProps) {
+function LotRow({ lot, onDelete, onUpdate }: LotRowProps) {
   const [deleting, setDeleting] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [editTicker, setEditTicker] = useState(lot.ticker)
+  const [editAmount, setEditAmount] = useState(String(lot.amount))
+  const [editDate, setEditDate] = useState(lot.purchase_date)
+  const [editStopLoss, setEditStopLoss] = useState(
+    lot.stop_loss_pct !== null ? String(lot.stop_loss_pct) : '',
+  )
+
+  // F3 — stop-loss alert badge
+  const stopLossTriggered =
+    lot.pl_pct !== null &&
+    lot.stop_loss_pct !== null &&
+    lot.pl_pct < -(lot.stop_loss_pct / 100)
 
   async function handleDelete() {
     setDeleting(true)
@@ -584,30 +769,142 @@ function LotRow({ lot, onDelete }: LotRowProps) {
     setDeleting(false)
   }
 
+  function openEdit() {
+    setEditTicker(lot.ticker)
+    setEditAmount(String(lot.amount))
+    setEditDate(lot.purchase_date)
+    setEditStopLoss(lot.stop_loss_pct !== null ? String(lot.stop_loss_pct) : '')
+    setEditing(true)
+  }
+
+  function cancelEdit() {
+    setEditing(false)
+  }
+
+  async function handleSave() {
+    const amount = parseFloat(editAmount)
+    if (isNaN(amount) || amount <= 0) return
+    setSaving(true)
+    try {
+      const stopLossVal = editStopLoss.trim() !== '' ? parseFloat(editStopLoss) : null
+      await onUpdate(lot.lot_id, {
+        ticker: editTicker.trim().toUpperCase(),
+        amount,
+        purchase_date: editDate,
+        stop_loss_pct: stopLossVal !== null && !isNaN(stopLossVal) ? stopLossVal : null,
+      })
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
-    <div
-      className="flex items-center justify-between px-2 py-1 rounded hover:bg-gray-50 group"
-      data-testid={`lot-row-${lot.lot_id}`}
-    >
-      <div className="min-w-0">
-        <span className="text-xs text-gray-700">
-          ${lot.amount.toLocaleString('en-US', { maximumFractionDigits: 0 })}
-        </span>
-        <span className="text-xs text-gray-400 ml-1">{lot.purchase_date}</span>
-        {lot.current_value === null && (
-          <span className="text-xs text-amber-500 ml-1">no data</span>
-        )}
+    <div data-testid={`lot-row-${lot.lot_id}`}>
+      {/* Row summary — always visible */}
+      <div className="flex items-center justify-between px-2 py-1 rounded hover:bg-gray-50 group">
+        <div className="min-w-0 flex items-center gap-1">
+          <span className="text-xs text-gray-700" data-testid={`lot-amount-${lot.lot_id}`}>
+            ${lot.amount.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+          </span>
+          <span className="text-xs text-gray-400 ml-1">{lot.purchase_date}</span>
+          {lot.current_value === null && (
+            <span className="text-xs text-amber-500 ml-1">no data</span>
+          )}
+          {/* F3 — stop-loss alert badge */}
+          {stopLossTriggered && (
+            <span className="text-xs font-semibold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full ml-1">
+              stop-loss
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0">
+          <button
+            type="button"
+            onClick={openEdit}
+            className="text-gray-300 hover:text-blue-500 text-xs px-0.5"
+            aria-label={`Edit lot ${lot.lot_id}`}
+            data-testid={`edit-lot-${lot.lot_id}`}
+          >
+            ✎
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleDelete()}
+            disabled={deleting}
+            className="text-gray-300 hover:text-red-500 text-xs px-0.5"
+            aria-label={`Delete lot ${lot.lot_id}`}
+            data-testid={`delete-lot-${lot.lot_id}`}
+          >
+            {deleting ? '…' : '×'}
+          </button>
+        </div>
       </div>
-      <button
-        type="button"
-        onClick={() => void handleDelete()}
-        disabled={deleting}
-        className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 text-xs ml-1 flex-shrink-0"
-        aria-label={`Delete lot ${lot.lot_id}`}
-        data-testid={`delete-lot-${lot.lot_id}`}
-      >
-        {deleting ? '…' : '×'}
-      </button>
+
+      {/* Inline edit form */}
+      {editing && (
+        <div className="mx-2 mb-1 p-2 bg-gray-50 border border-gray-200 rounded space-y-1.5">
+          <input
+            type="text"
+            aria-label="Edit ticker"
+            value={editTicker}
+            onChange={(e) => setEditTicker(e.target.value.toUpperCase())}
+            placeholder="Ticker"
+            className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+            data-testid={`edit-ticker-${lot.lot_id}`}
+          />
+          <input
+            type="number"
+            aria-label="Edit amount"
+            value={editAmount}
+            onChange={(e) => setEditAmount(e.target.value)}
+            placeholder="Amount (USD)"
+            min="0"
+            step="0.01"
+            className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+            data-testid={`edit-amount-${lot.lot_id}`}
+          />
+          <input
+            type="date"
+            aria-label="Edit purchase date"
+            value={editDate}
+            onChange={(e) => setEditDate(e.target.value)}
+            className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+            data-testid={`edit-date-${lot.lot_id}`}
+          />
+          {/* F3 — stop-loss field */}
+          <input
+            type="number"
+            aria-label="Stop loss % (optional)"
+            value={editStopLoss}
+            onChange={(e) => setEditStopLoss(e.target.value)}
+            placeholder="Stop loss % (e.g. 5 = −5%)"
+            min="0"
+            step="0.1"
+            className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+            data-testid={`edit-stop-loss-${lot.lot_id}`}
+          />
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={saving || !editTicker.trim() || !editAmount || !editDate}
+              className="flex-1 px-2 py-1 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              data-testid={`save-lot-${lot.lot_id}`}
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            <button
+              type="button"
+              onClick={cancelEdit}
+              className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700"
+              data-testid={`cancel-edit-lot-${lot.lot_id}`}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

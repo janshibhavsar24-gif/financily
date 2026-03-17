@@ -105,12 +105,41 @@ class RenameWatchlistRequest(BaseModel):
         return v
 
 
+class UpdateLotRequest(BaseModel):
+    ticker: str
+    amount: float
+    purchase_date: str  # YYYY-MM-DD
+    stop_loss_pct: Optional[float] = None  # F3 — None means "clear the alert"
+
+    @field_validator("ticker")
+    @classmethod
+    def validate_ticker(cls, v: str) -> str:
+        return v.upper().strip()
+
+    @field_validator("amount")
+    @classmethod
+    def validate_amount(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("Amount must be positive")
+        return v
+
+    @field_validator("purchase_date")
+    @classmethod
+    def validate_purchase_date(cls, v: str) -> str:
+        try:
+            date_type.fromisoformat(v)
+        except ValueError:
+            raise ValueError("purchase_date must be in YYYY-MM-DD format")
+        return v
+
+
 class LotInfo(BaseModel):
     lot_id: str
     ticker: str
     amount: float
     purchase_date: str
     added_at: str
+    stop_loss_pct: Optional[float] = None  # F3
 
 
 class HoldingsResponse(BaseModel):
@@ -157,6 +186,7 @@ class LotPL(BaseModel):
     pl_dollars: Optional[float]
     pl_pct: Optional[float]
     days_held: Optional[int]
+    stop_loss_pct: Optional[float] = None  # F3
 
 
 class TickerPL(BaseModel):
@@ -167,6 +197,9 @@ class TickerPL(BaseModel):
     total_pl_dollars: Optional[float]
     avg_pl_pct: Optional[float]
     allocation_pct: Optional[float]
+    beta: Optional[float] = None            # F1
+    spy_return_pct: Optional[float] = None  # F4
+    alpha_pct: Optional[float] = None       # F4 = avg_pl_pct - spy_return_pct
 
 
 class PortfolioSummaryPL(BaseModel):
@@ -177,6 +210,8 @@ class PortfolioSummaryPL(BaseModel):
     spy_equivalent_value: Optional[float]
     spy_return_pct: Optional[float]
     as_of_date: Optional[str]
+    portfolio_beta: Optional[float] = None  # F1
+    alpha_pct: Optional[float] = None       # F4 = total_pl_pct - spy_return_pct
 
 
 class PortfolioResponse(BaseModel):
@@ -523,7 +558,8 @@ def _get_holdings(watchlist_id: str) -> HoldingsResponse:
             """
             SELECT id, ticker, amount,
                    CAST(purchase_date AS VARCHAR),
-                   CAST(added_at AS VARCHAR)
+                   CAST(added_at AS VARCHAR),
+                   stop_loss_pct
             FROM watchlist_holdings
             WHERE watchlist_id = ?
             ORDER BY ticker ASC, added_at ASC
@@ -537,6 +573,7 @@ def _get_holdings(watchlist_id: str) -> HoldingsResponse:
                 LotInfo(
                     lot_id=r[0], ticker=r[1], amount=r[2],
                     purchase_date=r[3], added_at=r[4],
+                    stop_loss_pct=r[5],
                 )
                 for r in rows
             ],
@@ -595,6 +632,38 @@ def _delete_lot(watchlist_id: str, lot_id: str) -> None:
         conn.close()
 
 
+def _update_lot(watchlist_id: str, lot_id: str, ticker: str, amount: float, purchase_date: str, stop_loss_pct: Optional[float]) -> LotInfo:
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            UPDATE watchlist_holdings
+            SET ticker = ?, amount = ?, purchase_date = ?, stop_loss_pct = ?
+            WHERE id = ? AND watchlist_id = ?
+            """,
+            [ticker, amount, purchase_date, stop_loss_pct, lot_id, watchlist_id],
+        )
+        row = conn.execute(
+            """
+            SELECT id, ticker, amount,
+                   CAST(purchase_date AS VARCHAR),
+                   CAST(added_at AS VARCHAR),
+                   stop_loss_pct
+            FROM watchlist_holdings WHERE id = ? AND watchlist_id = ?
+            """,
+            [lot_id, watchlist_id],
+        ).fetchone()
+        if not row:
+            raise ValueError("Not found")
+        return LotInfo(
+            lot_id=row[0], ticker=row[1], amount=row[2],
+            purchase_date=row[3], added_at=row[4],
+            stop_loss_pct=row[5],
+        )
+    finally:
+        conn.close()
+
+
 def _fetch_portfolio(watchlist_id: str) -> PortfolioResponse:
     conn = get_connection()
     try:
@@ -609,7 +678,8 @@ def _fetch_portfolio(watchlist_id: str) -> PortfolioResponse:
             """
             SELECT id, ticker, amount,
                    CAST(purchase_date AS VARCHAR),
-                   CAST(added_at AS VARCHAR)
+                   CAST(added_at AS VARCHAR),
+                   stop_loss_pct
             FROM watchlist_holdings
             WHERE watchlist_id = ?
             ORDER BY ticker ASC, added_at ASC
@@ -663,7 +733,7 @@ def _fetch_portfolio(watchlist_id: str) -> PortfolioResponse:
 
         # Per-lot P&L (individual queries for nearest-date purchase price)
         lot_details: list[tuple] = []
-        for (lot_id, ticker, amount, purchase_date_str, added_at) in lots_rows:
+        for (lot_id, ticker, amount, purchase_date_str, added_at, lot_stop_loss) in lots_rows:
             purchase_row = conn.execute(
                 """
                 SELECT adj_close FROM prices
@@ -688,7 +758,7 @@ def _fetch_portfolio(watchlist_id: str) -> PortfolioResponse:
 
             lot_details.append(
                 (lot_id, ticker, amount, purchase_date_str, added_at,
-                 purchase_price, spy_purchase_price)
+                 purchase_price, spy_purchase_price, lot_stop_loss)
             )
 
         # Build per-lot P&L objects, aggregated by ticker
@@ -698,9 +768,12 @@ def _fetch_portfolio(watchlist_id: str) -> PortfolioResponse:
         total_current_value = 0.0
         total_spy_equivalent = 0.0
         has_any_current = False
+        # F4 — per-ticker SPY equivalent for alpha computation
+        ticker_spy_value: dict[str, float] = {}
+        ticker_spy_invested: dict[str, float] = {}
 
         for (lot_id, ticker, amount, purchase_date_str, _,
-             purchase_price, spy_purchase_price) in lot_details:
+             purchase_price, spy_purchase_price, lot_stop_loss) in lot_details:
             current_price, _ = current_prices.get(ticker, (None, None))
 
             current_value: Optional[float] = None
@@ -734,15 +807,46 @@ def _fetch_portfolio(watchlist_id: str) -> PortfolioResponse:
                 pl_dollars=_safe(pl_dollars),
                 pl_pct=_safe(pl_pct),
                 days_held=days_held,
+                stop_loss_pct=lot_stop_loss,
             )
             ticker_lots.setdefault(ticker, []).append(lot_pl)
             total_invested += amount
 
             if (spy_purchase_price is not None and spy_current_price is not None
                     and spy_purchase_price > 0):
-                total_spy_equivalent += amount * (spy_current_price / spy_purchase_price)
+                spy_equiv = amount * (spy_current_price / spy_purchase_price)
+                total_spy_equivalent += spy_equiv
+                ticker_spy_value[ticker] = ticker_spy_value.get(ticker, 0) + spy_equiv
+                ticker_spy_invested[ticker] = ticker_spy_invested.get(ticker, 0) + amount
 
         portfolio_total_current = total_current_value if has_any_current else None
+
+        # F4 — per-ticker SPY return for alpha computation
+        ticker_spy_return: dict[str, Optional[float]] = {}
+        for t in ticker_set:
+            inv = ticker_spy_invested.get(t, 0)
+            val = ticker_spy_value.get(t, 0)
+            ticker_spy_return[t] = (val - inv) / inv if inv > 0 else None
+
+        # F1 — beta per ticker (last 252 trading days vs SPY)
+        ticker_list_beta = list(ticker_set)
+        ph_beta = ", ".join("?" * len(ticker_list_beta))
+        beta_query_rows = conn.execute(
+            f"""
+            SELECT dr.ticker,
+                COVAR_POP(dr.ret, spy.ret) / NULLIF(VAR_POP(spy.ret), 0) AS beta
+            FROM daily_returns dr
+            JOIN daily_returns spy ON spy.ticker = 'SPY' AND spy.date = dr.date
+            WHERE dr.ticker IN ({ph_beta})
+              AND dr.date >= (
+                  SELECT MAX(date) - INTERVAL 252 DAYS
+                  FROM daily_returns WHERE ticker = 'SPY'
+              )
+            GROUP BY dr.ticker
+            """,
+            ticker_list_beta,
+        ).fetchall()
+        betas: dict[str, Optional[float]] = {r[0]: r[1] for r in beta_query_rows}
 
         # Aggregate per ticker
         holdings: list[TickerPL] = []
@@ -766,6 +870,12 @@ def _fetch_portfolio(watchlist_id: str) -> PortfolioResponse:
                 if portfolio_total_current and portfolio_total_current > 0 and has_ticker_data
                 else None
             )
+            t_spy_ret = ticker_spy_return.get(ticker)
+            t_alpha: Optional[float] = (
+                _safe(avg_pl_pct - t_spy_ret)
+                if avg_pl_pct is not None and t_spy_ret is not None
+                else None
+            )
             holdings.append(TickerPL(
                 ticker=ticker,
                 lots=lots,
@@ -774,6 +884,9 @@ def _fetch_portfolio(watchlist_id: str) -> PortfolioResponse:
                 total_pl_dollars=_safe(ticker_pl_dollars),
                 avg_pl_pct=_safe(avg_pl_pct),
                 allocation_pct=_safe(allocation_pct),
+                beta=_safe(betas.get(ticker)),
+                spy_return_pct=_safe(t_spy_ret),
+                alpha_pct=t_alpha,
             ))
 
         holdings.sort(key=lambda h: h.total_current_value or 0.0, reverse=True)
@@ -792,6 +905,22 @@ def _fetch_portfolio(watchlist_id: str) -> PortfolioResponse:
             else None
         )
 
+        # F1 — portfolio beta (weighted average by allocation)
+        weighted_beta = 0.0
+        beta_total_weight = 0.0
+        for h in holdings:
+            if h.allocation_pct is not None and h.beta is not None:
+                weighted_beta += h.allocation_pct * h.beta
+                beta_total_weight += h.allocation_pct
+        portfolio_beta_val = _safe(weighted_beta) if beta_total_weight > 0 else None
+
+        # F4 — portfolio alpha
+        portfolio_alpha_pct: Optional[float] = (
+            _safe(portfolio_pl_pct - spy_return_pct)
+            if portfolio_pl_pct is not None and spy_return_pct is not None
+            else None
+        )
+
         return PortfolioResponse(
             watchlist_id=watchlist_id,
             watchlist_name=watchlist_name,
@@ -803,6 +932,8 @@ def _fetch_portfolio(watchlist_id: str) -> PortfolioResponse:
                 spy_equivalent_value=_safe(total_spy_equivalent) if total_spy_equivalent > 0 else None,
                 spy_return_pct=_safe(spy_return_pct),
                 as_of_date=as_of_date,
+                portfolio_beta=portfolio_beta_val,
+                alpha_pct=portfolio_alpha_pct,
             ),
             holdings=holdings,
         )
@@ -866,6 +997,20 @@ async def add_lot(watchlist_id: str, req: AddLotRequest) -> LotInfo:
 )
 async def delete_lot(watchlist_id: str, lot_id: str) -> None:
     await asyncio.to_thread(_delete_lot, watchlist_id, lot_id)
+
+
+@router.patch(
+    "/api/watchlists/{watchlist_id}/holdings/{lot_id}",
+    response_model=LotInfo,
+)
+async def update_lot(watchlist_id: str, lot_id: str, req: UpdateLotRequest) -> LotInfo:
+    try:
+        return await asyncio.to_thread(
+            _update_lot, watchlist_id, lot_id, req.ticker, req.amount,
+            req.purchase_date, req.stop_loss_pct,
+        )
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Lot not found")
 
 
 @router.get("/api/watchlists/{watchlist_id}/portfolio", response_model=PortfolioResponse)

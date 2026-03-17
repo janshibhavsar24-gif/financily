@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test'
 import type {
   AssetsResponse,
+  EarningsDate,
   LotInfo,
   MonitorResponse,
   OptimizeResponse,
@@ -197,9 +198,9 @@ export const mockWatchlistList: WatchlistListResponse = {
 }
 
 export const mockHoldings: LotInfo[] = [
-  { lot_id: 'lot-1', ticker: 'SPY', amount: 5000, purchase_date: '2023-11-01', added_at: '2024-01-01T00:00:00' },
-  { lot_id: 'lot-2', ticker: 'AAPL', amount: 1000, purchase_date: '2024-01-15', added_at: '2024-01-01T01:00:00' },
-  { lot_id: 'lot-3', ticker: 'AAPL', amount: 500, purchase_date: '2024-06-01', added_at: '2024-06-01T00:00:00' },
+  { lot_id: 'lot-1', ticker: 'SPY', amount: 5000, purchase_date: '2023-11-01', added_at: '2024-01-01T00:00:00', stop_loss_pct: null },
+  { lot_id: 'lot-2', ticker: 'AAPL', amount: 1000, purchase_date: '2024-01-15', added_at: '2024-01-01T01:00:00', stop_loss_pct: null },
+  { lot_id: 'lot-3', ticker: 'AAPL', amount: 500, purchase_date: '2024-06-01', added_at: '2024-06-01T00:00:00', stop_loss_pct: null },
 ]
 
 export const mockPortfolio: PortfolioResponse = {
@@ -213,6 +214,8 @@ export const mockPortfolio: PortfolioResponse = {
     spy_equivalent_value: 7551,
     spy_return_pct: 0.1617,
     as_of_date: '2026-02-19',
+    portfolio_beta: 1.05,
+    alpha_pct: -0.0048,
   },
   holdings: [
     {
@@ -229,6 +232,7 @@ export const mockPortfolio: PortfolioResponse = {
           pl_dollars: 900,
           pl_pct: 0.18,
           days_held: 840,
+          stop_loss_pct: null,
         },
       ],
       total_amount: 5000,
@@ -236,6 +240,9 @@ export const mockPortfolio: PortfolioResponse = {
       total_pl_dollars: 900,
       avg_pl_pct: 0.18,
       allocation_pct: 0.785,
+      beta: 1.0,
+      spy_return_pct: 0.1617,
+      alpha_pct: 0.0183,
     },
     {
       ticker: 'AAPL',
@@ -251,6 +258,7 @@ export const mockPortfolio: PortfolioResponse = {
           pl_dollars: 100,
           pl_pct: 0.1,
           days_held: 395,
+          stop_loss_pct: null,
         },
         {
           lot_id: 'lot-3',
@@ -263,6 +271,7 @@ export const mockPortfolio: PortfolioResponse = {
           pl_dollars: 20,
           pl_pct: 0.04,
           days_held: 258,
+          stop_loss_pct: null,
         },
       ],
       total_amount: 1500,
@@ -270,9 +279,25 @@ export const mockPortfolio: PortfolioResponse = {
       total_pl_dollars: 120,
       avg_pl_pct: 0.08,
       allocation_pct: 0.215,
+      beta: 1.24,
+      spy_return_pct: 0.1617,
+      alpha_pct: -0.0817,
     },
   ],
 }
+
+// ---------------------------------------------------------------------------
+// Analytics mock data — tags (F2) and earnings (F6)
+// ---------------------------------------------------------------------------
+
+export const mockThemeTags: Record<string, string> = {
+  SPY: 'Diversifiers',
+  AAPL: 'AI Infrastructure',
+}
+
+export const mockEarnings: EarningsDate[] = [
+  { ticker: 'AAPL', earnings_date: '2026-05-01', note: 'Q1 2026' },
+]
 
 // ---------------------------------------------------------------------------
 // SSE helpers
@@ -347,6 +372,9 @@ export interface SetupApiMocksOptions {
   // Named watchlists
   watchlists?: WatchlistListResponse | ErrorOverride
   portfolio?: PortfolioResponse | ErrorOverride
+  // Analytics
+  tags?: Record<string, string> | ErrorOverride
+  earnings?: EarningsDate[] | ErrorOverride
 }
 
 export async function setupApiMocks(
@@ -478,6 +506,79 @@ export async function setupApiMocks(
     })
   })
 
+  // Tags (F2) — GET /api/tags and PUT/DELETE /api/tags/:ticker
+  await page.route('**/api/tags/*', async (route) => {
+    const method = route.request().method()
+    const override = o.tags
+    if (isErrorOverride(override)) {
+      await route.fulfill({ status: override.status, contentType: 'application/json', body: JSON.stringify(override.body) })
+      return
+    }
+    const currentTags: Record<string, string> = isErrorOverride(override) ? {} : (override ?? mockThemeTags)
+    if (method === 'PUT') {
+      const url = route.request().url()
+      const ticker = decodeURIComponent(url.split('/').at(-1) ?? '').toUpperCase()
+      let theme = 'Diversifiers'
+      try {
+        const req = JSON.parse(route.request().postData() ?? '{}') as { theme?: string }
+        theme = req.theme ?? theme
+      } catch { /* ignore */ }
+      await route.fulfill({ json: { tags: { ...currentTags, [ticker]: theme } } })
+    } else if (method === 'DELETE') {
+      await route.fulfill({ status: 204, body: '' })
+    } else {
+      await route.fulfill({ status: 405, body: '' })
+    }
+  })
+
+  await page.route('**/api/tags', async (route) => {
+    const override = o.tags
+    if (isErrorOverride(override)) {
+      await route.fulfill({ status: override.status, contentType: 'application/json', body: JSON.stringify(override.body) })
+      return
+    }
+    await route.fulfill({ json: { tags: isErrorOverride(override) ? {} : (override ?? mockThemeTags) } })
+  })
+
+  // Earnings (F6) — GET/POST /api/earnings and DELETE /api/earnings/:ticker/:date
+  await page.route('**/api/earnings/*', async (route) => {
+    const method = route.request().method()
+    const override = o.earnings
+    if (isErrorOverride(override)) {
+      await route.fulfill({ status: override.status, contentType: 'application/json', body: JSON.stringify(override.body) })
+      return
+    }
+    if (method === 'DELETE') {
+      await route.fulfill({ status: 204, body: '' })
+    } else {
+      await route.fulfill({ status: 405, body: '' })
+    }
+  })
+
+  await page.route('**/api/earnings', async (route) => {
+    const method = route.request().method()
+    const override = o.earnings
+    if (isErrorOverride(override)) {
+      await route.fulfill({ status: override.status, contentType: 'application/json', body: JSON.stringify(override.body) })
+      return
+    }
+    const entries: EarningsDate[] = isErrorOverride(override) ? [] : (override ?? mockEarnings)
+    if (method === 'POST') {
+      let ticker = 'UNKNOWN'
+      let earnings_date = '2026-01-01'
+      let note = ''
+      try {
+        const req = JSON.parse(route.request().postData() ?? '{}') as { ticker?: string; earnings_date?: string; note?: string }
+        ticker = req.ticker?.toUpperCase() ?? ticker
+        earnings_date = req.earnings_date ?? earnings_date
+        note = req.note ?? note
+      } catch { /* ignore */ }
+      await route.fulfill({ status: 201, json: { ticker, earnings_date, note } })
+    } else {
+      await route.fulfill({ json: { entries } })
+    }
+  })
+
   // Named watchlists list + create
   await page.route('**/api/watchlists', async (route) => {
     const method = route.request().method()
@@ -569,10 +670,36 @@ export async function setupApiMocks(
     }
   })
 
-  // Delete specific lot: DELETE /api/watchlists/:id/holdings/:lotId
+  // Delete or update specific lot: /api/watchlists/:id/holdings/:lotId
   // Added last so it has higher priority than the holdings base route
   await page.route('**/api/watchlists/*/holdings/*', async (route) => {
-    await route.fulfill({ status: 204, body: '' })
+    const method = route.request().method()
+    if (method === 'DELETE') {
+      await route.fulfill({ status: 204, body: '' })
+    } else if (method === 'PATCH') {
+      const url = route.request().url()
+      const lot_id = url.split('/').at(-1) ?? 'lot-unknown'
+      let ticker = 'UNKNOWN'
+      let amount = 0
+      let purchase_date = '2024-01-01'
+      try {
+        const req = JSON.parse(route.request().postData() ?? '{}') as { ticker?: string; amount?: number; purchase_date?: string }
+        ticker = req.ticker?.toUpperCase() ?? ticker
+        amount = req.amount ?? amount
+        purchase_date = req.purchase_date ?? purchase_date
+      } catch { /* ignore */ }
+      await route.fulfill({
+        json: {
+          lot_id,
+          ticker,
+          amount,
+          purchase_date,
+          added_at: new Date().toISOString(),
+        },
+      })
+    } else {
+      await route.fulfill({ status: 405, body: '' })
+    }
   })
 
   // Portfolio P&L — added last so it overrides watchlist/* if glob is greedy

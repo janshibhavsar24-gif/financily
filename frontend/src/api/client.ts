@@ -3,6 +3,9 @@ import type {
   AssetsResponse,
   ChatMessage,
   CreateWatchlistRequest,
+  EarningsDate,
+  EarningsDateRequest,
+  EarningsResponse,
   HoldingsResponse,
   LotInfo,
   MonitorResponse,
@@ -14,6 +17,9 @@ import type {
   SearchResponse,
   SyncRequest,
   SyncResponse,
+  ThemeTagRequest,
+  ThemeTagsResponse,
+  UpdateLotRequest,
   WatchlistInfo,
   WatchlistListResponse,
   WatchlistRequest,
@@ -152,8 +158,50 @@ export async function deleteLot(watchlistId: string, lotId: string): Promise<voi
   await fetch(`/api/watchlists/${watchlistId}/holdings/${lotId}`, { method: 'DELETE' })
 }
 
+export async function updateLot(watchlistId: string, lotId: string, req: UpdateLotRequest): Promise<LotInfo> {
+  return request<LotInfo>(`/api/watchlists/${watchlistId}/holdings/${lotId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+}
+
 export async function getPortfolio(watchlistId: string): Promise<PortfolioResponse> {
   return request<PortfolioResponse>(`/api/watchlists/${watchlistId}/portfolio`)
+}
+
+// Analytics — theme tags (F2)
+export async function getThemeTags(): Promise<ThemeTagsResponse> {
+  return request<ThemeTagsResponse>('/api/tags')
+}
+
+export async function setThemeTag(ticker: string, req: ThemeTagRequest): Promise<ThemeTagsResponse> {
+  return request<ThemeTagsResponse>(`/api/tags/${encodeURIComponent(ticker)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+}
+
+export async function deleteThemeTag(ticker: string): Promise<void> {
+  await fetch(`/api/tags/${encodeURIComponent(ticker)}`, { method: 'DELETE' })
+}
+
+// Analytics — earnings calendar (F6)
+export async function getEarnings(): Promise<EarningsResponse> {
+  return request<EarningsResponse>('/api/earnings')
+}
+
+export async function addEarningsDate(req: EarningsDateRequest): Promise<EarningsDate> {
+  return request<EarningsDate>('/api/earnings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+}
+
+export async function deleteEarningsDate(ticker: string, date: string): Promise<void> {
+  await fetch(`/api/earnings/${encodeURIComponent(ticker)}/${encodeURIComponent(date)}`, { method: 'DELETE' })
 }
 
 /**

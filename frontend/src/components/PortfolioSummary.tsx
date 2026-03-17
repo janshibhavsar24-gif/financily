@@ -29,6 +29,8 @@ export default function PortfolioSummary({ summary }: Props) {
     spy_equivalent_value,
     spy_return_pct,
     as_of_date,
+    portfolio_beta,
+    alpha_pct,
   } = summary
 
   return (
@@ -92,6 +94,24 @@ export default function PortfolioSummary({ summary }: Props) {
               data-testid="summary-spy-return"
             >
               {fmtPct(spy_return_pct)}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Portfolio β</p>
+            <p
+              className="text-sm font-semibold text-gray-700"
+              data-testid="summary-beta"
+            >
+              {portfolio_beta !== null ? portfolio_beta.toFixed(2) : '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">α vs SPY</p>
+            <p
+              className={`text-sm font-semibold ${plColor(alpha_pct)}`}
+              data-testid="summary-alpha"
+            >
+              {fmtPct(alpha_pct)}
             </p>
           </div>
         </div>
