@@ -30,3 +30,9 @@ N_OPTIMIZER_STARTS: int = int(os.getenv("N_OPTIMIZER_STARTS", "5"))
 # Tax model
 DEFAULT_TAX_RATE_LT: float = float(os.getenv("DEFAULT_TAX_RATE_LT", "0.15"))
 DEFAULT_TAX_RATE_ST: float = float(os.getenv("DEFAULT_TAX_RATE_ST", "0.37"))
+
+# Due Diligence AI feature
+ANTHROPIC_API_KEY: str | None = os.getenv("ANTHROPIC_API_KEY")
+DD_MODEL: str = os.getenv("DD_MODEL", "claude-sonnet-4-6")
+DD_MAX_TOKENS: int = int(os.getenv("DD_MAX_TOKENS", "4096"))
+DD_CHAT_MAX_TOKENS: int = int(os.getenv("DD_CHAT_MAX_TOKENS", "1024"))

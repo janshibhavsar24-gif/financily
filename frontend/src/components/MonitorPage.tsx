@@ -1,22 +1,36 @@
 import { useCallback, useEffect, useState } from 'react'
 import { addLot, deleteLot, updateLot } from '../api/client'
+import { useCVaRDecomposition } from '../hooks/useCVaRDecomposition'
 import { useEarnings } from '../hooks/useEarnings'
+import { useMarketRegime } from '../hooks/useMarketRegime'
 import { useMonitor } from '../hooks/useMonitor'
 import { usePortfolio } from '../hooks/usePortfolio'
+import { useRollingRatios } from '../hooks/useRollingRatios'
+import { useStressTest } from '../hooks/useStressTest'
 import { useThemeTags } from '../hooks/useThemeTags'
 import { useWatchlists } from '../hooks/useWatchlists'
+import { useWeightDrift } from '../hooks/useWeightDrift'
 import type { EarningsDateRequest, LotPL, UpdateLotRequest } from '../types/api'
 import AllocationBars from './AllocationBars'
+import CVaRDecompositionTable from './CVaRDecompositionTable'
+import ConcentrationHHI from './ConcentrationHHI'
 import CorrelationMatrix from './CorrelationMatrix'
 import EarningsCalendar from './EarningsCalendar'
 import HeatMap from './HeatMap'
 import HoldingsPLTable from './HoldingsPLTable'
+import LTCGTracker from './LTCGTracker'
+import MarketRegimeBanner from './MarketRegimeBanner'
 import PerformanceCallouts from './PerformanceCallouts'
 import PortfolioSummary from './PortfolioSummary'
 import PositionHealthTable from './PositionHealthTable'
 import PulseTable from './PulseTable'
+import RollingRatiosTable from './RollingRatiosTable'
+import SectorExposureTable from './SectorExposureTable'
 import SparklineBar from './SparklineBar'
+import StressTestPanel from './StressTestPanel'
 import ThematicClusters from './ThematicClusters'
+import WeightDriftTable from './WeightDriftTable'
+import ZScoreTable from './ZScoreTable'
 
 const THEME_OPTIONS = ['AI Infrastructure', 'Energy Transition', 'Diversifiers']
 
@@ -26,6 +40,11 @@ export default function MonitorPage() {
   const { state: monitorState, fetch: fetchMonitor, reset: resetMonitor } = useMonitor()
   const { state: tagsState, load: loadTags, setTag, removeTag } = useThemeTags()
   const { state: earningsState, load: loadEarnings, add: addEarning, remove: removeEarning } = useEarnings()
+  const { state: regimeState, fetch: fetchRegime, reset: resetRegime } = useMarketRegime()
+  const { state: stressState, fetch: fetchStress, reset: resetStress } = useStressTest()
+  const { state: ratiosState, fetch: fetchRatios, reset: resetRatios } = useRollingRatios()
+  const { state: cvarState, fetch: fetchCVaR, reset: resetCVaR } = useCVaRDecomposition()
+  const { state: driftState, fetch: fetchDrift, reset: resetDrift } = useWeightDrift()
 
   // Lot management
   const [newLotTicker, setNewLotTicker] = useState('')
@@ -59,26 +78,49 @@ export default function MonitorPage() {
     if (!selectedId) {
       resetPortfolio()
       resetMonitor()
+      resetRegime()
+      resetStress()
+      resetRatios()
+      resetCVaR()
+      resetDrift()
       return
     }
     void fetchPortfolio(selectedId)
     void loadTags()
     void loadEarnings()
-  }, [selectedId, fetchPortfolio, resetPortfolio, resetMonitor, loadTags, loadEarnings])
+    void fetchRegime()
+    void fetchDrift(selectedId)
+  }, [selectedId, fetchPortfolio, resetPortfolio, resetMonitor, loadTags, loadEarnings, fetchRegime, resetRegime, resetStress, resetRatios, resetCVaR, fetchDrift, resetDrift])
 
-  // Refresh market data when portfolio loads
+  // Refresh market data + analytics when portfolio loads
   useEffect(() => {
     if (!portfolioState.result) {
       resetMonitor()
+      resetStress()
+      resetRatios()
+      resetCVaR()
       return
     }
     const tickers = portfolioState.result.holdings.map((h) => h.ticker)
     if (tickers.length === 0) {
       resetMonitor()
+      resetStress()
+      resetRatios()
+      resetCVaR()
       return
     }
     void fetchMonitor(tickers)
-  }, [portfolioState.result, fetchMonitor, resetMonitor])
+    // Compute weights from allocation_pct for analytics endpoints
+    const totalAlloc = portfolioState.result.holdings.reduce(
+      (s, h) => s + (h.allocation_pct ?? 0), 0
+    )
+    const weights = portfolioState.result.holdings.map(
+      (h) => totalAlloc > 0 ? (h.allocation_pct ?? 0) / totalAlloc : 1 / tickers.length
+    )
+    void fetchStress(tickers, weights)
+    void fetchRatios(tickers, weights)
+    void fetchCVaR(tickers, weights)
+  }, [portfolioState.result, fetchMonitor, resetMonitor, fetchStress, resetStress, fetchRatios, resetRatios, fetchCVaR, resetCVaR])
 
   function handleRefresh() {
     if (selectedId) void fetchPortfolio(selectedId)
@@ -626,6 +668,13 @@ export default function MonitorPage() {
         {/* Portfolio data */}
         {!portfolioState.loading && portfolio !== null && holdings.length > 0 && (
           <div className="space-y-8 max-w-5xl">
+            {/* Market Context Banner — always visible when portfolio loaded */}
+            {regimeState.result && (
+              <section>
+                <MarketRegimeBanner regime={regimeState.result} />
+              </section>
+            )}
+
             {/* Portfolio Summary */}
             <section>
               <PortfolioSummary summary={portfolio.summary} />
@@ -655,11 +704,31 @@ export default function MonitorPage() {
               </section>
             )}
 
+            {/* Concentration HHI — pure frontend, instant */}
+            {holdings.length > 0 && (
+              <section>
+                <h2 className="text-base font-bold text-gray-800 mb-3">Concentration (HHI)</h2>
+                <ConcentrationHHI
+                  holdings={holdings}
+                  stocks={stocks}
+                  themeTags={tagsState.tags}
+                />
+              </section>
+            )}
+
             {/* Holdings P&L Table */}
             <section>
               <h2 className="text-base font-bold text-gray-800 mb-3">Holdings Detail</h2>
               <HoldingsPLTable holdings={holdings} />
             </section>
+
+            {/* LTCG Tracker — pure frontend */}
+            {holdings.some((h) => h.lots.some((l) => l.pl_dollars !== null && l.pl_dollars > 0 && l.days_held !== null && l.days_held < 365)) && (
+              <section>
+                <h2 className="text-base font-bold text-gray-800 mb-3">LTCG Opportunity Tracker</h2>
+                <LTCGTracker lots={holdings.flatMap((h) => h.lots)} />
+              </section>
+            )}
 
             {/* F6 — Earnings Calendar */}
             {earningsState.entries.length > 0 && (
@@ -686,6 +755,22 @@ export default function MonitorPage() {
                   <section>
                     <h2 className="text-base font-bold text-gray-800 mb-3">Position Health</h2>
                     <PositionHealthTable holdings={holdings} stocks={stocksWithData} />
+                  </section>
+                )}
+
+                {/* Z-Score Table */}
+                {stocksWithData.some((s) => s.price_zscore !== null) && (
+                  <section>
+                    <h2 className="text-base font-bold text-gray-800 mb-3">Mean-Reversion Z-Scores</h2>
+                    <ZScoreTable stocks={stocksWithData} holdings={holdings} />
+                  </section>
+                )}
+
+                {/* Sector Exposure */}
+                {stocksWithData.some((s) => s.sector !== null) && (
+                  <section>
+                    <h2 className="text-base font-bold text-gray-800 mb-3">Sector Exposure</h2>
+                    <SectorExposureTable holdings={holdings} stocks={stocksWithData} />
                   </section>
                 )}
 
@@ -727,8 +812,63 @@ export default function MonitorPage() {
                     <CorrelationMatrix matrix={monitorState.result.correlation} />
                   </section>
                 )}
+
+                {/* Weight Drift */}
+                {driftState.result && (
+                  <section>
+                    <h2 className="text-base font-bold text-gray-800 mb-3">Weight Drift</h2>
+                    <WeightDriftTable drift={driftState.result} />
+                  </section>
+                )}
               </>
             )}
+
+            {/* Risk Analysis divider */}
+            <div className="border-t border-gray-200 pt-2">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                Risk Analysis
+              </p>
+            </div>
+
+            {/* Stress Test */}
+            <section>
+              <h2 className="text-base font-bold text-gray-800 mb-3">Historical Stress Tests</h2>
+              {stressState.loading ? (
+                <p className="text-sm text-gray-400">Running stress tests…</p>
+              ) : stressState.result ? (
+                <StressTestPanel
+                  response={stressState.result}
+                  loading={false}
+                  error={null}
+                />
+              ) : stressState.error ? (
+                <p className="text-sm text-red-500">{stressState.error}</p>
+              ) : null}
+            </section>
+
+            {/* Rolling Ratios */}
+            <section>
+              <h2 className="text-base font-bold text-gray-800 mb-3">Rolling Risk-Adjusted Ratios</h2>
+              {ratiosState.loading ? (
+                <p className="text-sm text-gray-400">Computing ratios…</p>
+              ) : ratiosState.result ? (
+                <RollingRatiosTable response={ratiosState.result} />
+              ) : ratiosState.error ? (
+                <p className="text-sm text-red-500">{ratiosState.error}</p>
+              ) : null}
+            </section>
+
+            {/* CVaR Decomposition */}
+            <section>
+              <h2 className="text-base font-bold text-gray-800 mb-3">CVaR Decomposition by Position</h2>
+              {cvarState.loading ? (
+                <p className="text-sm text-gray-400">Computing CVaR decomposition…</p>
+              ) : cvarState.result ? (
+                <CVaRDecompositionTable response={cvarState.result} />
+              ) : cvarState.error ? (
+                <p className="text-sm text-red-500">{cvarState.error}</p>
+              ) : null}
+            </section>
           </div>
         )}
       </main>

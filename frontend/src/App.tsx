@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import AssetSelector from './components/AssetSelector'
+import DueDiligencePage from './components/DueDiligencePage'
 import ForecastTable from './components/ForecastTable'
 import MetricsCard from './components/MetricsCard'
 import MonitorPage from './components/MonitorPage'
@@ -10,7 +11,7 @@ import WeightsBar from './components/WeightsBar'
 import { useOptimize } from './hooks/useOptimize'
 import type { OptimizeRequest } from './types/api'
 
-type ActiveView = 'optimizer' | 'monitor'
+type ActiveView = 'optimizer' | 'monitor' | 'due-diligence'
 
 const DEFAULT_REQUEST: OptimizeRequest = {
   tickers: [],
@@ -82,6 +83,18 @@ export default function App() {
           >
             Monitor
           </button>
+          <button
+            type="button"
+            data-testid="nav-due-diligence"
+            onClick={() => setActiveView('due-diligence')}
+            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+              activeView === 'due-diligence'
+                ? 'bg-blue-100 text-blue-700'
+                : 'text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            Due Diligence
+          </button>
         </nav>
       </header>
 
@@ -89,6 +102,8 @@ export default function App() {
       <div className="flex flex-1 min-h-0">
         {activeView === 'monitor' ? (
           <MonitorPage />
+        ) : activeView === 'due-diligence' ? (
+          <DueDiligencePage />
         ) : (
         <>
             {/* Left panel */}

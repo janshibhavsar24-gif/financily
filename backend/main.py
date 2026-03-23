@@ -15,6 +15,10 @@ from backend.api.risk import router as risk_router
 from backend.api.search import router as search_router
 from backend.api.monitor import router as monitor_router
 from backend.api.analytics import router as analytics_router
+from backend.api.market_data import router as market_data_router
+from backend.api.stress_test import router as stress_router
+from backend.api.analytics_monitor import router as analytics_monitor_router
+from backend.api.due_diligence import router as dd_router
 
 
 @asynccontextmanager
@@ -68,6 +72,10 @@ app.include_router(risk_router)
 app.include_router(search_router)
 app.include_router(monitor_router)
 app.include_router(analytics_router)
+app.include_router(market_data_router)
+app.include_router(stress_router)
+app.include_router(analytics_monitor_router)
+app.include_router(dd_router)
 
 # Static file serving — MUST be registered last
 FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"

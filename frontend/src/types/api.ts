@@ -119,6 +119,9 @@ export interface StockMonitor {
   ann_volatility: number | null
   drawdown_from_high: number | null
   spark: SparkBar[]
+  sector: string | null
+  price_zscore: number | null
+  price_52w_mean: number | null
 }
 
 export interface CorrelationMatrix {
@@ -256,4 +259,92 @@ export interface PortfolioResponse {
   watchlist_name: string
   summary: PortfolioSummaryPL
   holdings: TickerPL[]
+}
+
+// Market Regime (F1 + F10)
+export interface MarketRegimeResponse {
+  regime: string
+  regime_description: string
+  spy_price: number | null
+  spy_sma_200: number | null
+  realized_vol_30d: number | null
+  rate_10y: number | null
+  rate_3m: number | null
+  yield_spread: number | null
+  yield_status: string
+}
+
+// Stress Test (F3)
+export interface StressScenario {
+  name: string
+  start: string
+  end: string
+  portfolio_loss_pct: number
+  worst_ticker: string | null
+  worst_loss_pct: number | null
+  coverage_pct: number
+  tickers_count: number
+}
+
+export interface StressTestRequest {
+  tickers: string[]
+  weights: number[]
+}
+
+export interface StressTestResponse {
+  scenarios: StressScenario[]
+}
+
+// Weight Drift (F7)
+export interface DriftItem {
+  ticker: string
+  target_weight: number
+  current_weight: number
+  drift: number
+  drift_flag: boolean
+}
+
+export interface DriftResponse {
+  has_run: boolean
+  run_at: string | null
+  target_return: number | null
+  horizon_years: number | null
+  items: DriftItem[]
+  total_drift_score: number
+}
+
+// Rolling Ratios (F8)
+export interface RollingWindowMetrics {
+  sortino: number | null
+  calmar: number | null
+  info_ratio: number | null
+}
+
+export interface TickerWindowMetrics {
+  sortino: number | null
+  calmar: number | null
+}
+
+export interface RollingRatiosResponse {
+  windows: number[]
+  portfolio: Record<string, RollingWindowMetrics>
+  tickers: Record<string, Record<string, TickerWindowMetrics>>
+}
+
+// CVaR Decomposition (F9)
+export interface CVaRItem {
+  ticker: string
+  weight: number
+  cvar_contribution_pct: number
+  cvar_contribution_sign: string
+}
+
+export interface CVaRDecompositionRequest {
+  tickers: string[]
+  weights: number[]
+}
+
+export interface CVaRDecompositionResponse {
+  portfolio_cvar_95: number
+  items: CVaRItem[]
 }

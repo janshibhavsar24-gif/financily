@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import math
 import uuid
 from datetime import date as date_type
@@ -50,6 +51,9 @@ class StockMonitor(BaseModel):
     ann_volatility: Optional[float]
     drawdown_from_high: Optional[float]
     spark: list[SparkBar]
+    sector: Optional[str] = None
+    price_zscore: Optional[float] = None
+    price_52w_mean: Optional[float] = None
 
 
 class CorrelationMatrix(BaseModel):
@@ -356,6 +360,58 @@ def _fetch_monitor_data(tickers: list[str]) -> MonitorResponse:
             sparks[t].append(SparkBar(date=d, ret=r))
 
         # ----------------------------------------------------------------
+        # Sector — LEFT JOIN asset_universe per ticker
+        # ----------------------------------------------------------------
+        sector_rows = conn.execute(
+            f"""
+            SELECT au.symbol, au.sector
+            FROM asset_universe au
+            WHERE au.symbol IN ({ph})
+            """,
+            tickers,
+        ).fetchall()
+        sectors: dict[str, Optional[str]] = {r[0]: r[1] for r in sector_rows}
+
+        # ----------------------------------------------------------------
+        # Z-score — mean and stddev of adj_close over last 252 trading days
+        # ----------------------------------------------------------------
+        zscore_rows = conn.execute(
+            f"""
+            WITH hist AS (
+                SELECT ticker, adj_close,
+                       ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
+                FROM prices
+                WHERE ticker IN ({ph})
+            ),
+            stats AS (
+                SELECT ticker,
+                       AVG(adj_close) AS mean_252,
+                       STDDEV_POP(adj_close) AS std_252
+                FROM hist
+                WHERE rn <= 252
+                GROUP BY ticker
+            ),
+            latest AS (
+                SELECT ticker, adj_close AS current_price
+                FROM hist
+                WHERE rn = 1
+            )
+            SELECT s.ticker, s.mean_252, s.std_252, l.current_price
+            FROM stats s
+            JOIN latest l ON s.ticker = l.ticker
+            """,
+            tickers,
+        ).fetchall()
+        zscore_data: dict[str, tuple] = {}
+        for row in zscore_rows:
+            t, mean_252, std_252, current_price = row
+            if std_252 and std_252 > 0 and mean_252 is not None and current_price is not None:
+                z = (current_price - mean_252) / std_252
+                zscore_data[t] = (round(float(z), 3), round(float(mean_252), 4))
+            else:
+                zscore_data[t] = (None, round(float(mean_252), 4) if mean_252 is not None else None)
+
+        # ----------------------------------------------------------------
         # Correlation matrix — last 252 trading days, pandas .corr()
         # ----------------------------------------------------------------
         corr_rows = conn.execute(
@@ -397,6 +453,7 @@ def _fetch_monitor_data(tickers: list[str]) -> MonitorResponse:
         # ----------------------------------------------------------------
         stocks: list[StockMonitor] = []
         for ticker in tickers:
+            z_score_val, mean_252_val = zscore_data.get(ticker, (None, None))
             if ticker not in metrics_by_ticker:
                 stocks.append(StockMonitor(
                     ticker=ticker,
@@ -409,6 +466,9 @@ def _fetch_monitor_data(tickers: list[str]) -> MonitorResponse:
                     ann_volatility=None,
                     drawdown_from_high=None,
                     spark=sparks.get(ticker, []),
+                    sector=sectors.get(ticker),
+                    price_zscore=None,
+                    price_52w_mean=None,
                 ))
                 continue
 
@@ -435,6 +495,9 @@ def _fetch_monitor_data(tickers: list[str]) -> MonitorResponse:
                 ann_volatility=_safe(ann_vol),
                 drawdown_from_high=drawdown,
                 spark=sparks.get(ticker, []),
+                sector=sectors.get(ticker),
+                price_zscore=z_score_val,
+                price_52w_mean=mean_252_val,
             ))
 
         return MonitorResponse(stocks=stocks, correlation=correlation)
@@ -1017,5 +1080,115 @@ async def update_lot(watchlist_id: str, lot_id: str, req: UpdateLotRequest) -> L
 async def get_portfolio(watchlist_id: str) -> PortfolioResponse:
     try:
         return await asyncio.to_thread(_fetch_portfolio, watchlist_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Watchlist not found")
+
+
+# ---------------------------------------------------------------------------
+# Weight drift models + endpoint
+# ---------------------------------------------------------------------------
+
+class DriftItem(BaseModel):
+    ticker: str
+    target_weight: float
+    current_weight: float
+    drift: float
+    drift_flag: bool
+
+
+class DriftResponse(BaseModel):
+    has_run: bool
+    run_at: Optional[str]
+    target_return: Optional[float]
+    horizon_years: Optional[int]
+    items: list[DriftItem]
+    total_drift_score: float
+
+
+def _fetch_drift(watchlist_id: str) -> DriftResponse:
+    portfolio = _fetch_portfolio(watchlist_id)
+    holdings = portfolio.holdings
+
+    if not holdings:
+        return DriftResponse(
+            has_run=False,
+            run_at=None,
+            target_return=None,
+            horizon_years=None,
+            items=[],
+            total_drift_score=0.0,
+        )
+
+    ticker_set = sorted([h.ticker for h in holdings])
+
+    conn = get_connection()
+    try:
+        runs = conn.execute("""
+            SELECT run_id, run_at, target_return, horizon_years, result, tickers
+            FROM portfolio_runs
+            ORDER BY run_at DESC
+            LIMIT 100
+        """).fetchall()
+    finally:
+        conn.close()
+
+    matched_run = None
+    for run_row in runs:
+        try:
+            run_tickers = json.loads(run_row[5])
+            if sorted(run_tickers) == ticker_set:
+                matched_run = run_row
+                break
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+    if matched_run is None:
+        return DriftResponse(
+            has_run=False,
+            run_at=None,
+            target_return=None,
+            horizon_years=None,
+            items=[],
+            total_drift_score=0.0,
+        )
+
+    _run_id, run_at, target_return, horizon_years, result_json, _tickers = matched_run
+    try:
+        result = json.loads(result_json)
+        target_weights: dict[str, float] = result.get("weights", {})
+    except (json.JSONDecodeError, TypeError):
+        target_weights = {}
+
+    items: list[DriftItem] = []
+    for h in holdings:
+        ticker = h.ticker
+        # allocation_pct is a decimal fraction (0-1)
+        current_weight = h.allocation_pct if h.allocation_pct is not None else 0.0
+        target_weight = target_weights.get(ticker, 0.0)
+        drift = current_weight - target_weight
+        items.append(DriftItem(
+            ticker=ticker,
+            target_weight=round(target_weight * 100, 2),
+            current_weight=round(current_weight * 100, 2),
+            drift=round(drift * 100, 2),
+            drift_flag=abs(drift) > 0.03,
+        ))
+
+    total_drift_score = round(sum(abs(item.drift) for item in items) / 2, 2)
+
+    return DriftResponse(
+        has_run=True,
+        run_at=str(run_at),
+        target_return=target_return,
+        horizon_years=horizon_years,
+        items=items,
+        total_drift_score=total_drift_score,
+    )
+
+
+@router.get("/api/watchlists/{watchlist_id}/drift", response_model=DriftResponse)
+async def get_drift(watchlist_id: str) -> DriftResponse:
+    try:
+        return await asyncio.to_thread(_fetch_drift, watchlist_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Watchlist not found")

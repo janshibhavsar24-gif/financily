@@ -115,3 +115,11 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
             PRIMARY KEY (ticker, earnings_date)
         )
     """)
+    # Due Diligence — fundamentals cache (24h TTL)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS due_diligence_cache (
+            ticker       VARCHAR PRIMARY KEY,
+            fundamentals VARCHAR,
+            fetched_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """)

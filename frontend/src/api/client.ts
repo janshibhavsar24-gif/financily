@@ -3,18 +3,25 @@ import type {
   AssetsResponse,
   ChatMessage,
   CreateWatchlistRequest,
+  CVaRDecompositionRequest,
+  CVaRDecompositionResponse,
+  DriftResponse,
   EarningsDate,
   EarningsDateRequest,
   EarningsResponse,
   HoldingsResponse,
   LotInfo,
+  MarketRegimeResponse,
   MonitorResponse,
   OptimizeRequest,
   OptimizeResponse,
   PortfolioMetrics,
   PortfolioResponse,
   RenameWatchlistRequest,
+  RollingRatiosResponse,
   SearchResponse,
+  StressTestRequest,
+  StressTestResponse,
   SyncRequest,
   SyncResponse,
   ThemeTagRequest,
@@ -185,6 +192,48 @@ export async function setThemeTag(ticker: string, req: ThemeTagRequest): Promise
 
 export async function deleteThemeTag(ticker: string): Promise<void> {
   await fetch(`/api/tags/${encodeURIComponent(ticker)}`, { method: 'DELETE' })
+}
+
+// Market regime
+export async function getMarketRegime(): Promise<MarketRegimeResponse> {
+  return request<MarketRegimeResponse>('/api/market-regime')
+}
+
+// Stress test
+export async function runStressTest(req: StressTestRequest): Promise<StressTestResponse> {
+  return request<StressTestResponse>('/api/stress', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+}
+
+// Rolling risk-adjusted ratios
+export async function getRollingRatios(
+  tickers: string[],
+  weights: number[],
+): Promise<RollingRatiosResponse> {
+  const params = new URLSearchParams({
+    tickers: tickers.join(','),
+    weights: weights.join(','),
+  })
+  return request<RollingRatiosResponse>(`/api/analytics/ratios?${params}`)
+}
+
+// CVaR decomposition
+export async function getCVaRDecomposition(
+  req: CVaRDecompositionRequest,
+): Promise<CVaRDecompositionResponse> {
+  return request<CVaRDecompositionResponse>('/api/analytics/cvar-decomposition', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+}
+
+// Weight drift
+export async function getWeightDrift(watchlistId: string): Promise<DriftResponse> {
+  return request<DriftResponse>(`/api/watchlists/${watchlistId}/drift`)
 }
 
 // Analytics — earnings calendar (F6)
